@@ -1,0 +1,1699 @@
+diff --git a/Include/internal.h b/Include/internal.h
+index b1c4ab8..9d18823 100644
+--- a/Include/internal.h
++++ b/Include/internal.h
+@@ -91,6 +91,9 @@ typedef struct _DEVICE_EXTENSION
+     // Power related
+     //
+     WDFQUEUE IdleQueue;
++    WDFWAITLOCK PowerTransitionLock;
++    volatile LONG RuntimeD0;
++    volatile LONG DisplayOn;
+ 
+     //
+     // Touch related members used for the lifetime of the device
+@@ -125,3 +128,6 @@ typedef struct _DEVICE_EXTENSION
+ } DEVICE_EXTENSION, *PDEVICE_EXTENSION;
+ 
+ WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(DEVICE_EXTENSION, GetDeviceContext)
++
++NTSTATUS NabuEnterD0(WDFDEVICE Device);
++NTSTATUS NabuExitD0(WDFDEVICE Device);
+diff --git a/Include/nt36xxx/ntinternal.h b/Include/nt36xxx/ntinternal.h
+index 6a68197..5fbb4ab 100644
+--- a/Include/nt36xxx/ntinternal.h
++++ b/Include/nt36xxx/ntinternal.h
+@@ -188,6 +188,8 @@ typedef struct _FT5X_CONTROLLER_CONTEXT
+ 	// Power state
+ 	//
+ 	DEVICE_POWER_STATE DevicePowerState;
++    BOOLEAN ChipAsleep;
++    BOOLEAN FirmwareReady;
+ 
+ 	//
+ 	// Register configuration programmed to chip
+diff --git a/Include/spb.h b/Include/spb.h
+index 3df5b3f..b847701 100644
+--- a/Include/spb.h
++++ b/Include/spb.h
+@@ -42,7 +42,7 @@ NTSTATUS
+ SpbReadDataSynchronously(
+     _In_ SPB_CONTEXT *SpbContext,
+     _In_ UCHAR Address,
+-    _In_reads_bytes_(Length) PVOID Data,
++    _Out_writes_bytes_(Length) PVOID Data,
+     _In_ ULONG Length,
+     IN BOOLEAN hack
+     );
+diff --git a/include/report.h b/include/report.h
+index 9307cff..8e23ae1 100644
+--- a/include/report.h
++++ b/include/report.h
+@@ -86,8 +86,13 @@ typedef struct _REPORT_CONTEXT
+ 	OBJECT_CACHE Cache;
+ 	TOUCH_SCREEN_PROPERTIES Props;
+ 	WDFQUEUE PingPongQueue;
++    WDFTIMER ContinuousTimer;
++    volatile LONG ReportsSuppressed;
+ } REPORT_CONTEXT, * PREPORT_CONTEXT;
+ 
++VOID ReportStopContinuous(PREPORT_CONTEXT Context);
++VOID ReportReleaseContacts(PREPORT_CONTEXT Context);
++
+ NTSTATUS
+ ReportWakeup(
+ 	IN PREPORT_CONTEXT ReportContext
+@@ -125,4 +130,4 @@ ReportObjects(
+ NTSTATUS
+ ReportConfigureContinuousSimulationTimer(
+ 	IN WDFDEVICE DeviceHandle
+-);
+\ No newline at end of file
++);
+diff --git a/src/device.c b/src/device.c
+index 4db0e52..c8606d2 100644
+--- a/src/device.c
++++ b/src/device.c
+@@ -95,10 +95,13 @@ OnInterruptIsr(
+     //
+     // Service touch interrupts.
+     //
+-    status = Ft5xServiceInterrupts(
+-        devContext->TouchContext,
+-        &devContext->I2CContext,
+-        &devContext->ReportContext);
++    if (devContext->TouchContext != NULL) {
++        FT5X_CONTROLLER_CONTEXT* c = devContext->TouchContext;
++        WdfWaitLockAcquire(c->ControllerLock, NULL);
++        if (!InterlockedCompareExchange(&devContext->ReportContext.ReportsSuppressed, 0, 0))
++            status = Ft5xServiceInterrupts(c, &devContext->I2CContext, &devContext->ReportContext);
++        WdfWaitLockRelease(c->ControllerLock);
++    }
+ 
+     if (!NT_SUCCESS(status))
+     {
+@@ -143,7 +146,7 @@ Return Value:
+ 
+     UNREFERENCED_PARAMETER(PreviousState);
+ 
+-    status = TchWakeDevice(devContext->TouchContext, &devContext->I2CContext);
++    status = NabuEnterD0(Device);
+ 
+     if (!NT_SUCCESS(status))
+     {
+@@ -164,7 +167,7 @@ Return Value:
+     //
+     // Complete any pending Idle IRPs
+     //
+-    TchCompleteIdleIrp(devContext);
++    if (NT_SUCCESS(status)) TchCompleteIdleIrp(devContext);
+ 
+     return status;
+ }
+@@ -201,7 +204,7 @@ Return Value:
+ 
+     UNREFERENCED_PARAMETER(TargetState);
+ 
+-    status = TchStandbyDevice(devContext->TouchContext, &devContext->I2CContext, &devContext->ReportContext);
++    status = NabuExitD0(Device);
+ 
+     if (!NT_SUCCESS(status))
+     {
+@@ -582,9 +585,11 @@ OnReleaseHardware(
+ 
+     devContext = GetDeviceContext(FxDevice);
+ 
+-    status = PoUnregisterPowerSettingCallback(
+-        devContext->PoFxPowerSettingCallbackHandle1
+-    );
++    status = STATUS_SUCCESS;
++    if (devContext->PoFxPowerSettingCallbackHandle1) {
++        status = PoUnregisterPowerSettingCallback(devContext->PoFxPowerSettingCallbackHandle1);
++        devContext->PoFxPowerSettingCallbackHandle1 = NULL;
++    }
+ 
+     if (!NT_SUCCESS(status))
+     {
+@@ -595,9 +600,18 @@ OnReleaseHardware(
+             status);
+     }
+ 
+-    status = PoUnregisterPowerSettingCallback(
+-        devContext->PoFxPowerSettingCallbackHandle2
+-    );
++    status = STATUS_SUCCESS;
++    if (devContext->PoFxPowerSettingCallbackHandle2) {
++        status = PoUnregisterPowerSettingCallback(devContext->PoFxPowerSettingCallbackHandle2);
++        devContext->PoFxPowerSettingCallbackHandle2 = NULL;
++    }
++    InterlockedExchange(&devContext->RuntimeD0, 0);
++    InterlockedExchange(&devContext->ReportContext.ReportsSuppressed, 1);
++    ReportStopContinuous(&devContext->ReportContext);
++    if (devContext->ReportContext.ContinuousTimer) {
++        WdfObjectDelete(devContext->ReportContext.ContinuousTimer);
++        devContext->ReportContext.ContinuousTimer = NULL;
++    }
+ 
+     if (!NT_SUCCESS(status))
+     {
+@@ -620,6 +634,7 @@ OnReleaseHardware(
+     }
+ 
+     status = TchFreeContext(devContext->TouchContext);
++    devContext->TouchContext = NULL;
+ 
+     if (!NT_SUCCESS(status))
+     {
+diff --git a/src/driver.c b/src/driver.c
+index 685e8fe..96f82aa 100644
+--- a/src/driver.c
++++ b/src/driver.c
+@@ -181,6 +181,15 @@ Return Value:
+     devContext = GetDeviceContext(fxDevice);
+     devContext->FxDevice = fxDevice;
+     devContext->InputMode = MODE_MULTI_TOUCH;
++    {
++        WDF_OBJECT_ATTRIBUTES lockAttributes;
++        WDF_OBJECT_ATTRIBUTES_INIT(&lockAttributes);
++        lockAttributes.ParentObject = fxDevice;
++        status = WdfWaitLockCreate(&lockAttributes, &devContext->PowerTransitionLock);
++        if (!NT_SUCCESS(status)) goto exit;
++        devContext->DisplayOn = 1;
++        devContext->ReportContext.ReportsSuppressed = 1;
++    }
+ 
+     //
+     // Create a parallel dispatch queue to handle requests from HID Class
+@@ -317,4 +326,4 @@ Return Value:
+     PAGED_CODE();
+ 
+     WPP_CLEANUP(WdfDriverWdmGetDriverObject(Driver));
+-}
+\ No newline at end of file
++}
+diff --git a/src/nt36xxx.inf b/src/nt36xxx.inf
+index 08055bc..a240701 100644
+--- a/src/nt36xxx.inf
++++ b/src/nt36xxx.inf
+@@ -26,9 +26,9 @@ novatek_nt36523_fw01.bin=1
+ novatek_nt36523_fw02.bin=1
+ 
+ [Manufacturer]
+-%Manufacturer_Name% = Standard,NT$ARCH$
++%Manufacturer_Name% = Standard,NT$ARCH$.10.0...26100
+ 
+-[Standard.NT$ARCH$]
++[Standard.NT$ARCH$.10.0...26100]
+ %TchDriver_Device_Desc% = TchDriver_Device.NT, ACPI\NTTS3652
+ 
+ ;*****************************************
+diff --git a/src/nt36xxx/ntfwupdate.c b/src/nt36xxx/ntfwupdate.c
+index e3f40cf..48277f9 100644
+--- a/src/nt36xxx/ntfwupdate.c
++++ b/src/nt36xxx/ntfwupdate.c
+@@ -1,20 +1,7 @@
+-#include <nt36xxx\ntfwupdate.h>
++#include <nt36xxx/ntfwupdate.h>
++#include <nt36xxx/fwparse.h>
+ #include <ntfwupdate.tmh>
+ 
+-//Firmware update functions copied from linux driver
+-
+-PUCHAR fwbuf = NULL;
+-
+-struct nvt_ts_bin_map {
+-    char name[12];
+-    unsigned int BIN_addr;
+-    unsigned int SRAM_addr;
+-    unsigned int size;
+-    unsigned int crc;
+-};
+-
+-static struct nvt_ts_bin_map* bin_map;
+-
+ //NT36523 memory map
+ unsigned int EVENT_BUF_ADDR = 0x2FE00;
+ /* Phase 2 Host Download */
+@@ -73,7 +60,7 @@ int nt36xxx_eng_reset(IN SPB_CONTEXT* SpbContext)
+         return ret;
+ 
+     Interval.QuadPart = RELATIVE(MILLISECONDS(10));
+-    KeDelayExecutionThread(KernelMode, TRUE, &Interval);
++    KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+ 
+     return ret;
+ }
+@@ -89,7 +76,7 @@ int nt36xxx_bootloader_reset(IN SPB_CONTEXT* SpbContext)
+ 
+     /* MCU has to reboot from bootloader: this is the typical boot time */
+     Interval.QuadPart = RELATIVE(MILLISECONDS(5));
+-    KeDelayExecutionThread(KernelMode, TRUE, &Interval);
++    KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+ 
+     ret = nt36xxx_write_addr(SpbContext, SPI_RD_FAST_ADDR, 0x00);
+     if (ret)
+@@ -98,466 +85,135 @@ int nt36xxx_bootloader_reset(IN SPB_CONTEXT* SpbContext)
+     return ret;
+ }
+ 
+-static unsigned int byte_to_word(const unsigned char* data)
+-{
+-    return data[0] + (data[1] << 8) + (data[2] << 16) + (data[3] << 24);
+-}
+-
+-static void nvt_set_bld_crc_bank(unsigned int DES_ADDR, unsigned int SRAM_ADDR,
+-    unsigned int LENGTH_ADDR, unsigned int size,
+-    unsigned int G_CHECKSUM_ADDR, unsigned int crc, SPB_CONTEXT* SpbContext)
+-{
+-    /* write destination address */
+-    nt36xxx_set_page(SpbContext, DES_ADDR);
+-    fwbuf[0] = (SRAM_ADDR) & 0xFF;
+-    fwbuf[1] = (SRAM_ADDR >> 8) & 0xFF;
+-    fwbuf[2] = (SRAM_ADDR >> 16) & 0xFF;
+-    SpbWriteDataSynchronously(SpbContext, SPI_WRITE_MASK(DES_ADDR & 0x7F), fwbuf, 3);
+-
+-    /* write length */
+-    //nvt_set_page(LENGTH_ADDR);
+-    fwbuf[0] = (size) & 0xFF;
+-    fwbuf[1] = (size >> 8) & 0xFF;
+-    fwbuf[2] = (size >> 16) & 0x01;
+-    SpbWriteDataSynchronously(SpbContext, SPI_WRITE_MASK(LENGTH_ADDR & 0x7F), fwbuf, 3);
+ 
+-    /* write golden dlm checksum */
+-    //nvt_set_page(G_CHECKSUM_ADDR);
+-    fwbuf[0] = (crc) & 0xFF;
+-    fwbuf[1] = (crc >> 8) & 0xFF;
+-    fwbuf[2] = (crc >> 16) & 0xFF;
+-    fwbuf[3] = (crc >> 24) & 0xFF;
+-    SpbWriteDataSynchronously(SpbContext, SPI_WRITE_MASK(G_CHECKSUM_ADDR & 0x7F), fwbuf, 4);
+-
+-    return;
+-}
++/* Every operation propagates failure. Keep upstream wire framing/CRC byte 16. */
++#define CHECK_IO(expr) do { status = (expr); if (!NT_SUCCESS(status)) goto Cleanup; } while (0)
+ 
+-void nvt_bld_crc_enable(SPB_CONTEXT* SpbContext)
++static NTSTATUS NabuCrcBank(SPB_CONTEXT* spb, unsigned int dest,
++    unsigned int lenaddr, unsigned int crcaddr, const NABU_FW_PART* p)
+ {
+-    unsigned char buf[20] = { 0 };
+-
+-    //---set xdata index to BLD_CRC_EN_ADDR---
+-    nt36xxx_set_page(SpbContext, BLD_CRC_EN_ADDR);
+-
+-    //---read data from index---
+-    buf[0] = 0xFF;
+-    SpbReadDataSynchronously(SpbContext, SPI_READ_MASK(BLD_CRC_EN_ADDR & 0x7F), buf, 20, FALSE);
+-
+-    //---write data to index---
+-    buf[0] = buf[16] | (0x01 << 7);
+-    SpbWriteDataSynchronously(SpbContext, SPI_WRITE_MASK(BLD_CRC_EN_ADDR & 0x7F), buf, 1);
++    NTSTATUS status;
++    UCHAR b[4];
++    CHECK_IO(nt36xxx_set_page(spb, dest));
++    b[0] = (UCHAR)p->sram; b[1] = (UCHAR)(p->sram >> 8); b[2] = (UCHAR)(p->sram >> 16);
++    CHECK_IO(SpbWriteDataSynchronously(spb, SPI_WRITE_MASK(dest & 0x7f), b, 3));
++    b[0] = (UCHAR)p->size; b[1] = (UCHAR)(p->size >> 8); b[2] = (UCHAR)((p->size >> 16) & 1);
++    CHECK_IO(SpbWriteDataSynchronously(spb, SPI_WRITE_MASK(lenaddr & 0x7f), b, 3));
++    b[0] = (UCHAR)p->crc; b[1] = (UCHAR)(p->crc >> 8);
++    b[2] = (UCHAR)(p->crc >> 16); b[3] = (UCHAR)(p->crc >> 24);
++    CHECK_IO(SpbWriteDataSynchronously(spb, SPI_WRITE_MASK(crcaddr & 0x7f), b, 4));
++Cleanup:
++    return status;
+ }
+ 
+-void nvt_fw_crc_enable(SPB_CONTEXT* SpbContext)
++static NTSTATUS NabuFinishTransfer(SPB_CONTEXT* spb)
+ {
+-    unsigned char buf[4] = { 0 };
+-
+-    //---set xdata index to EVENT BUF ADDR---
+-    nt36xxx_set_page(SpbContext, EVENT_BUF_ADDR);
+-
+-    //---clear fw reset status---
+-    buf[0] = 0x00;
+-    SpbWriteDataSynchronously(SpbContext, SPI_WRITE_MASK(NT36XXX_EVT_RESET_COMPLETE & 0x7F), buf, 1);
+-
+-    //---enable fw crc---
+-    buf[0] = 0xAE;	//enable fw crc command
+-    SpbWriteDataSynchronously(SpbContext, SPI_WRITE_MASK(NT36XXX_EVT_HOST_CMD & 0x7F), buf, 1);
+-}
+-
+-void nvt_boot_ready(SPB_CONTEXT* SpbContext)
+-{
+-    LARGE_INTEGER delay = { 0 };
+-    
+-    //---write BOOT_RDY status cmds---
+-    nt36xxx_write_addr(SpbContext, BOOT_RDY_ADDR, 1);
+-    
++    NTSTATUS status;
++    UCHAR b[20] = { 0 };
++    LARGE_INTEGER delay;
++    CHECK_IO(nt36xxx_set_page(spb, BLD_CRC_EN_ADDR));
++    b[0] = 0xff;
++    CHECK_IO(SpbReadDataSynchronously(spb, SPI_READ_MASK(BLD_CRC_EN_ADDR & 0x7f), b, 20, FALSE));
++    b[0] = b[16] | 0x80; /* Preserve upstream controller-specific SPI framing. */
++    CHECK_IO(SpbWriteDataSynchronously(spb, SPI_WRITE_MASK(BLD_CRC_EN_ADDR & 0x7f), b, 1));
++    CHECK_IO(nt36xxx_set_page(spb, EVENT_BUF_ADDR));
++    b[0] = 0;
++    CHECK_IO(SpbWriteDataSynchronously(spb, SPI_WRITE_MASK(NT36XXX_EVT_RESET_COMPLETE), b, 1));
++    b[0] = 0xae;
++    CHECK_IO(SpbWriteDataSynchronously(spb, SPI_WRITE_MASK(NT36XXX_EVT_HOST_CMD), b, 1));
++    CHECK_IO(nt36xxx_write_addr(spb, BOOT_RDY_ADDR, 1));
+     delay.QuadPart = RELATIVE(MILLISECONDS(5));
+-	KeDelayExecutionThread(KernelMode, TRUE, &delay);
+-}
+-
+-void disable_pen_input_device(SPB_CONTEXT* SpbContext, BOOLEAN disable)
+-{
+-    unsigned char buf[4] = { 0 };
+-    
+-    LARGE_INTEGER delay = { 0 };
+-    
++    KeDelayExecutionThread(KernelMode, FALSE, &delay);
+     delay.QuadPart = RELATIVE(MILLISECONDS(35));
+-	KeDelayExecutionThread(KernelMode, TRUE, &delay);
+-
+-    //---set xdata index to EVENT BUF ADDR---
+-    nt36xxx_set_page(SpbContext, EVENT_BUF_ADDR | NT36XXX_EVT_HOST_CMD);
+-
+-    //---clear fw reset status---
+-    buf[0] = 0x7B;
+-    buf[1] = disable;
+-    SpbWriteDataSynchronously(SpbContext, SPI_WRITE_MASK(NT36XXX_EVT_HOST_CMD & 0x7F), buf, 2);
++    KeDelayExecutionThread(KernelMode, FALSE, &delay);
++    CHECK_IO(nt36xxx_set_page(spb, EVENT_BUF_ADDR | NT36XXX_EVT_HOST_CMD));
++    b[0] = 0x7b; b[1] = FALSE;
++    CHECK_IO(SpbWriteDataSynchronously(spb, SPI_WRITE_MASK(NT36XXX_EVT_HOST_CMD), b, 2));
++Cleanup:
++    return status;
+ }
+ 
+-NTSTATUS
+-NVTLoadFirmwareFile(WDFDEVICE FxDevice, SPB_CONTEXT* SpbContext) {
+-    HANDLE handle;
+-    NTSTATUS ntstatus;
+-    IO_STATUS_BLOCK ioStatusBlock;
+-    LARGE_INTEGER byteOffset;
+-
+-    UNICODE_STRING     uniName;
+-    UNICODE_STRING     ntFWPath;
+-    OBJECT_ATTRIBUTES  objAttr;
+-
+-    WDFKEY          hKey = NULL;
+-
+-    UNICODE_STRING  NVTFWFilePathKey;
+-    WDFSTRING NVTFWFilePath;
+-
+-    GUID efiGUID = { 0x9042a9de, 0x23dc, 0x4a38, { 0x96, 0xfb, 0x7a, 0xde, 0xd0, 0x80, 0x51, 0x6a } };
+-    UNICODE_STRING efiVar;
+-    unsigned int outVar[32];
+-    ULONG outVarLen;
+-
+-    RtlInitUnicodeString(&efiVar, L"UEFIDisplayInfo");
+-
+-    outVarLen = sizeof(outVar);
+-
+-    ntstatus = ExGetFirmwareEnvironmentVariable(&efiVar, &efiGUID, &outVar, &outVarLen, NULL);
+-    if (NT_SUCCESS(ntstatus)) {
+-        if(outVar[10] == 0x25) {
+-            RtlInitUnicodeString(&NVTFWFilePathKey, L"NVTFWImageHuaxingPath");
+-        }
+-        else {
+-            RtlInitUnicodeString(&NVTFWFilePathKey, L"NVTFWImageTianmaPath");
+-        }
+-    }
++NTSTATUS NVTLoadFirmwareFile(WDFDEVICE device, SPB_CONTEXT* spb)
++{
++    NTSTATUS status;
++    HANDLE file = NULL;
++    WDFKEY key = NULL;
++    WDFSTRING pathString = NULL;
++    PUCHAR buffer = NULL, transfer = NULL;
++    NABU_FW_PART* parts = NULL;
++    unsigned int count = 0, i;
++    UNICODE_STRING path, fullPath = { 0 }, keyName, efiName;
++    OBJECT_ATTRIBUTES attributes;
++    IO_STATUS_BLOCK iosb = { 0 };
++    FILE_STANDARD_INFORMATION fileInfo;
++    LARGE_INTEGER offset;
++    GUID efiGuid = { 0x9042a9de, 0x23dc, 0x4a38, { 0x96, 0xfb, 0x7a, 0xde, 0xd0, 0x80, 0x51, 0x6a } };
++    ULONG display[32] = { 0 }, displayLength = sizeof(display);
++    if (KeGetCurrentIrql() != PASSIVE_LEVEL) return STATUS_INVALID_DEVICE_STATE;
++    RtlInitUnicodeString(&efiName, L"UEFIDisplayInfo");
++    status = ExGetFirmwareEnvironmentVariable(&efiName, &efiGuid, display, &displayLength, NULL);
++    if (NT_SUCCESS(status) && displayLength >= 11u * sizeof(ULONG) && display[10] != 0x25)
++        RtlInitUnicodeString(&keyName, L"NVTFWImageTianmaPath");
+     else
+-        RtlInitUnicodeString(&NVTFWFilePathKey, L"NVTFWImageHuaxingPath");
+-
+-    PCHAR buffer = (PCHAR)ExAllocatePoolWithTag(
+-        NonPagedPool,
+-        FWBUFFER_SIZE,
+-        TOUCH_POOL_TAG
+-    );
+-
+-    //FILE_STANDARD_INFORMATION fileInfo = { 0 };
+-
+-    WdfStringCreate(
+-        NULL,
+-        WDF_NO_OBJECT_ATTRIBUTES,
+-        &NVTFWFilePath);
+-
+-    ntstatus = WdfDeviceOpenRegistryKey(FxDevice,
+-        PLUGPLAY_REGKEY_DRIVER,
+-        GENERIC_READ,
+-        WDF_NO_OBJECT_ATTRIBUTES,
+-        &hKey);
+-
+-    if (NT_SUCCESS(ntstatus)) {
+-
+-        ntstatus = WdfRegistryQueryString(hKey, &NVTFWFilePathKey, NVTFWFilePath);
+-
+-        WdfRegistryClose(hKey);
+-    }
+-
+-    WdfStringGetUnicodeString(NVTFWFilePath, &uniName);
+-
+-    ntFWPath.Length = 0;
+-    ntFWPath.MaximumLength = 256 * sizeof(WCHAR);
+-    ntFWPath.Buffer = ExAllocatePoolWithTag(NonPagedPool, ntFWPath.MaximumLength, TOUCH_POOL_TAG);
+-
+-    RtlAppendUnicodeToString(&ntFWPath, L"\\DosDevices\\");
+-    RtlAppendUnicodeStringToString(&ntFWPath, &uniName);
+-
+-    InitializeObjectAttributes(&objAttr, &ntFWPath,
+-        OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+-        NULL, NULL);
+-
+-
+-    // Do not try to perform any file operations at higher IRQL levels.
+-    // Instead, you may use a work item or a system worker thread to perform file operations.
+-
+-    if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+-        return STATUS_INVALID_DEVICE_STATE;
+-
+-    ntstatus = ZwCreateFile(&handle,
+-        GENERIC_READ,
+-        &objAttr, &ioStatusBlock, NULL,
+-        FILE_ATTRIBUTE_NORMAL,
+-        0,
+-        FILE_OPEN,
+-        FILE_SYNCHRONOUS_IO_NONALERT,
+-        NULL, 0);
+-
+-    /*ntstatus = ZwQueryInformationFile(
+-        handle,
+-        &ioStatusBlock,
+-        &fileInfo,
+-        sizeof(fileInfo),
+-        FileStandardInformation
+-    );*/
+-
+-    if (NT_SUCCESS(ntstatus)) {
+-        Trace(
+-            TRACE_LEVEL_INFORMATION,
+-            TRACE_INTERRUPT,
+-            "Found: novatek_nt36523_fw.bin");
+-
+-        byteOffset.QuadPart = 0;
+-        ntstatus = ZwReadFile(handle, NULL, NULL, NULL, &ioStatusBlock,
+-            buffer, FWBUFFER_SIZE, &byteOffset, NULL);
+-        ZwClose(handle);
+-    }
+-
+-    //nvt_bin_header_parser
+-    static unsigned int partition = 0;
+-    static unsigned char ilm_dlm_num = 2;
+-    static unsigned char cascade_2nd_header_info = 0;
+-
+-    unsigned int list = 0;
+-    unsigned int pos = 0x00;
+-    unsigned int end = 0x00;
+-    unsigned char info_sec_num = 0;
+-    unsigned char ovly_sec_num = 0;
+-    unsigned char ovly_info = 0;
+-    unsigned char find_bin_header = 0;
+-
+-    end = buffer[0] + (buffer[1] << 8) + (buffer[2] << 16) + (buffer[3] << 24);
+-    cascade_2nd_header_info = (buffer[0x20] & 0x02) >> 1;
+-    Trace(
+-        TRACE_LEVEL_INFORMATION,
+-        TRACE_INTERRUPT,
+-        "cascade_2nd_header_info = %d", cascade_2nd_header_info);
+-
+-    if (cascade_2nd_header_info) {
+-        pos = 0x30;	// info section start at 0x30 offset
+-        while (pos < (end / 2)) {
+-            info_sec_num++;
+-            pos += 0x10;	/* each header info is 16 bytes */
+-        }
+-
+-        info_sec_num = info_sec_num + 1; //next header section
++        RtlInitUnicodeString(&keyName, L"NVTFWImageHuaxingPath");
++    CHECK_IO(WdfStringCreate(NULL, WDF_NO_OBJECT_ATTRIBUTES, &pathString));
++    CHECK_IO(WdfDeviceOpenRegistryKey(device, PLUGPLAY_REGKEY_DRIVER, GENERIC_READ,
++        WDF_NO_OBJECT_ATTRIBUTES, &key));
++    CHECK_IO(WdfRegistryQueryString(key, &keyName, pathString));
++    WdfRegistryClose(key); key = NULL;
++    WdfStringGetUnicodeString(pathString, &path);
++    /* Prefix, trailing NUL, and USHORT overflow checked before allocation. */
++    if (!path.Length || (path.Length & 1) || path.Length > 0xffe0u) {
++        status = STATUS_OBJECT_PATH_INVALID; goto Cleanup;
+     }
+-    else {
+-        pos = 0x30;	// info section start at 0x30 offset
+-        while (pos < end) {
+-            info_sec_num++;
+-            pos += 0x10;	/* each header info is 16 bytes */
+-        }
+-    }
+-
+-    /*
+-     * Find the DLM OVLY section
+-     * [0:3] Overlay Section Number
+-     * [4]   Overlay Info
+-     */
+-    ovly_info = (buffer[0x28] & 0x10) >> 4;
+-    ovly_sec_num = (ovly_info) ? (buffer[0x28] & 0x0F) : 0;
+-
+-    /*
+-     * calculate all partition number
+-     * ilm_dlm_num (ILM & DLM) + ovly_sec_num + info_sec_num
+-     */
+-    partition = ilm_dlm_num + ovly_sec_num + info_sec_num;
+-    Trace(
+-        TRACE_LEVEL_INFORMATION,
+-        TRACE_INTERRUPT,
+-        "ovly_info = %d, ilm_dlm_num = %d, ovly_sec_num = %d, info_sec_num = %d, partition = %d\n",
+-        ovly_info, ilm_dlm_num, ovly_sec_num, info_sec_num, partition);
+-
+-    /* allocated memory for header info */
+-    bin_map = (struct nvt_ts_bin_map*)(PUCHAR)ExAllocatePoolWithTag(
+-        NonPagedPool,
+-        (partition + 1) * sizeof(struct nvt_ts_bin_map),
+-        TOUCH_POOL_TAG
+-    );
+-    if (bin_map == NULL) {
+-        Trace(
+-            TRACE_LEVEL_INFORMATION,
+-            TRACE_INTERRUPT,
+-            "kzalloc for bin_map failed!\n");
+-    }
+-
+-    for (list = 0; list < partition; list++) {
+-        /*
+-         * [1] parsing ILM & DLM header info
+-         * BIN_addr : SRAM_addr : size (12-bytes)
+-         * crc located at 0x18 & 0x1C
+-         */
+-        if (list < ilm_dlm_num) {
+-            bin_map[list].BIN_addr = byte_to_word((unsigned char*)&buffer[0 + list * 12]);
+-            bin_map[list].SRAM_addr = byte_to_word((unsigned char*)&buffer[4 + list * 12]);
+-            bin_map[list].size = byte_to_word((unsigned char*)&buffer[8 + list * 12]);
+-            bin_map[list].crc = byte_to_word((unsigned char*)&buffer[0x18 + list * 4]);
+-
+-            if (list == 0)
+-                sprintf(bin_map[list].name, "ILM");
+-            else if (list == 1)
+-                sprintf(bin_map[list].name, "DLM");
+-        }
+-
+-        /*
+-         * [2] parsing others header info
+-         * SRAM_addr : size : BIN_addr : crc (16-bytes)
+-         */
+-        if ((list >= ilm_dlm_num) && ((unsigned char)list < (ilm_dlm_num + info_sec_num))) {
+-            if (find_bin_header == 0) {
+-                /* others partition located at 0x30 offset */
+-                pos = 0x30 + (0x10 * (list - ilm_dlm_num));
+-            }
+-            else if (find_bin_header && cascade_2nd_header_info) {
+-                /* cascade 2nd header info */
+-                pos = end - 0x10;
+-            }
+-
+-            bin_map[list].SRAM_addr = byte_to_word((unsigned char*)&buffer[pos]);
+-            bin_map[list].size = byte_to_word((unsigned char*)&buffer[pos + 4]);
+-            bin_map[list].BIN_addr = byte_to_word((unsigned char*)&buffer[pos + 8]);
+-            bin_map[list].crc = byte_to_word((unsigned char*)&buffer[pos + 12]);
+-
+-            /* detect header end to protect parser function */
+-            if ((bin_map[list].BIN_addr < end) && (bin_map[list].size != 0)) {
+-                sprintf(bin_map[list].name, "Header");
+-                find_bin_header = 1;
+-            }
+-            else {
+-                sprintf(bin_map[list].name, "Info-%d", (list - ilm_dlm_num));
+-            }
+-        }
+-
+-        /*
+-         * [3] parsing overlay section header info
+-         * SRAM_addr : size : BIN_addr : crc (16-bytes)
+-         */
+-        if ((unsigned char)list >= (ilm_dlm_num + info_sec_num)) {
+-            /* overlay info located at DLM (list = 1) start addr */
+-            pos = bin_map[1].BIN_addr + (0x10 * (list - ilm_dlm_num - info_sec_num));
+-
+-            bin_map[list].SRAM_addr = byte_to_word((unsigned char*)&buffer[pos]);
+-            bin_map[list].size = byte_to_word((unsigned char*)&buffer[pos + 4]);
+-            bin_map[list].BIN_addr = byte_to_word((unsigned char*)&buffer[pos + 8]);
+-            bin_map[list].crc = byte_to_word((unsigned char*)&buffer[pos + 12]);
+-
+-            sprintf(bin_map[list].name, "Overlay-%d", (list - ilm_dlm_num - info_sec_num));
+-        }
+-
+-        /* BIN size error detect */
+-        if ((bin_map[list].BIN_addr + bin_map[list].size) > FWBUFFER_SIZE) {
+-            Trace(
+-                TRACE_LEVEL_INFORMATION,
+-                TRACE_INTERRUPT, "access range (0x%08X to 0x%08X) is larger than bin size!\n",
+-                bin_map[list].BIN_addr, bin_map[list].BIN_addr + bin_map[list].size);
+-        }
+-
+-        //		NVT_LOG("[%d][%s] SRAM (0x%08X), SIZE (0x%08X), BIN (0x%08X), CRC (0x%08X)\n",
+-        //				list, bin_map[list].name,
+-        //				bin_map[list].SRAM_addr, bin_map[list].size,  bin_map[list].BIN_addr, bin_map[list].crc);
++    fullPath.MaximumLength = (USHORT)(path.Length + sizeof(L"\\DosDevices\\"));
++    fullPath.Buffer = ExAllocatePoolWithTag(NonPagedPool, fullPath.MaximumLength, TOUCH_POOL_TAG);
++    if (!fullPath.Buffer) { status = STATUS_INSUFFICIENT_RESOURCES; goto Cleanup; }
++    CHECK_IO(RtlAppendUnicodeToString(&fullPath, L"\\DosDevices\\"));
++    CHECK_IO(RtlAppendUnicodeStringToString(&fullPath, &path));
++    InitializeObjectAttributes(&attributes, &fullPath, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
++    CHECK_IO(ZwCreateFile(&file, GENERIC_READ | SYNCHRONIZE, &attributes, &iosb, NULL,
++        FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_OPEN,
++        FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE, NULL, 0));
++    CHECK_IO(ZwQueryInformationFile(file, &iosb, &fileInfo, sizeof(fileInfo), FileStandardInformation));
++    if (fileInfo.EndOfFile.QuadPart != FWBUFFER_SIZE) { status = STATUS_INVALID_IMAGE_FORMAT; goto Cleanup; }
++    buffer = ExAllocatePoolWithTag(NonPagedPool, FWBUFFER_SIZE, TOUCH_POOL_TAG);
++    parts = ExAllocatePoolWithTag(NonPagedPool, NABU_MAX_PARTITIONS * sizeof(*parts), TOUCH_POOL_TAG);
++    if (!buffer || !parts) { status = STATUS_INSUFFICIENT_RESOURCES; goto Cleanup; }
++    offset.QuadPart = 0;
++    CHECK_IO(ZwReadFile(file, NULL, NULL, NULL, &iosb, buffer, FWBUFFER_SIZE, &offset, NULL));
++    if (iosb.Information != FWBUFFER_SIZE) { status = STATUS_DEVICE_DATA_ERROR; goto Cleanup; }
++    ZwClose(file); file = NULL;
++    if (!NabuParseFirmware(buffer, FWBUFFER_SIZE, parts, NABU_MAX_PARTITIONS, &count)) {
++        status = STATUS_INVALID_IMAGE_FORMAT; goto Cleanup;
+     }
+-    //nvt_bin_header_parser end
+-
+-    //nvt_download_init
+-    fwbuf = (PUCHAR)ExAllocatePoolWithTag(
+-        NonPagedPool,
+-        NVT_TRANSFER_LEN + 2,
+-        TOUCH_POOL_TAG
+-    );
+-
+-    //nvt_download_firmware_hw_crc
+-    nt36xxx_bootloader_reset(SpbContext);
+-
+-    /* [0] ILM */
+-    /* write register bank */
+-    nvt_set_bld_crc_bank(ILM_DES_ADDR, bin_map[0].SRAM_addr,
+-        ILM_LENGTH_ADDR, bin_map[0].size,
+-        G_ILM_CHECKSUM_ADDR, bin_map[0].crc, SpbContext);
+-
+-    /* [1] DLM */
+-    /* write register bank */
+-    nvt_set_bld_crc_bank(DLM_DES_ADDR, bin_map[1].SRAM_addr,
+-        DLM_LENGTH_ADDR, bin_map[1].size,
+-        G_DLM_CHECKSUM_ADDR, bin_map[1].crc, SpbContext);
+-
+-    nt36xxx_write_addr(SpbContext, TX_AUTO_COPY_EN, 0x69);
+-
+-    //nvt_write_firmware
+-    list = 0;//unsigned int list = 0;
+-    char* name;
+-    unsigned int BIN_addr, SRAM_addr, size;
+-    int ret = 0;
+-
+-    memset(fwbuf, 0, (NVT_TRANSFER_LEN + 1));
+-
+-    for (list = 0; list < partition; list++) {
+-        /* initialize variable */
+-        SRAM_addr = bin_map[list].SRAM_addr;
+-        size = bin_map[list].size;
+-        BIN_addr = bin_map[list].BIN_addr;
+-        name = bin_map[list].name;
+-
+-        //		NVT_LOG("[%d][%s] SRAM (0x%08X), SIZE (0x%08X), BIN (0x%08X)\n",
+-        //				list, name, SRAM_addr, size, BIN_addr);
+-
+-                /* Check data size */
+-        if ((BIN_addr + size) > FWBUFFER_SIZE) {
+-            Trace(
+-                TRACE_LEVEL_INFORMATION,
+-                TRACE_INTERRUPT, "access range (0x%08X to 0x%08X) is larger than bin size!\n",
+-                BIN_addr, BIN_addr + size);
+-        }
+-
+-        /* ignore reserved partition (Reserved Partition size is zero) */
+-        if (!size)
+-            continue;
+-        else
+-            size = size + 1;
+-
+-        /* write data to SRAM */
+-        //nvt_write_sram
+-        ret = 0;
+-        int i = 0;
+-        unsigned short len = 0;
+-        int count = 0;
+-
+-        if (size % NVT_TRANSFER_LEN)
+-            count = (size / NVT_TRANSFER_LEN) + 1;
+-        else
+-            count = (size / NVT_TRANSFER_LEN);
+-
+-        for (i = 0; i < count; i++) {
+-            len = (unsigned short)((size < NVT_TRANSFER_LEN) ? size : NVT_TRANSFER_LEN);
+-
+-            //---set xdata index to start address of SRAM---
+-            ret = nt36xxx_set_page(SpbContext, SRAM_addr);
+-            if (ret) {
+-                Trace(
+-                    TRACE_LEVEL_INFORMATION,
+-                    TRACE_INTERRUPT, "set page failed, ret = %d\n", ret);
+-                return ret;
+-            }
+-
+-            //---write data into SRAM---
+-            memcpy(fwbuf, &buffer[BIN_addr], len);	//payload
+-            ret = SpbWriteDataSynchronously(SpbContext, SPI_WRITE_MASK(SRAM_addr & 0x7F), fwbuf, len);
+-            if (ret) {
+-                Trace(
+-                    TRACE_LEVEL_INFORMATION,
+-                    TRACE_INTERRUPT, "write to sram failed, ret = %d\n", ret);
+-                return ret;
+-            }
+-
+-            SRAM_addr += NVT_TRANSFER_LEN;
+-            BIN_addr += NVT_TRANSFER_LEN;
+-            size -= NVT_TRANSFER_LEN;
++    transfer = ExAllocatePoolWithTag(NonPagedPool, NVT_TRANSFER_LEN + 2, TOUCH_POOL_TAG);
++    if (!transfer) { status = STATUS_INSUFFICIENT_RESOURCES; goto Cleanup; }
++    CHECK_IO(nt36xxx_bootloader_reset(spb));
++    CHECK_IO(NabuCrcBank(spb, ILM_DES_ADDR, ILM_LENGTH_ADDR, G_ILM_CHECKSUM_ADDR, &parts[0]));
++    CHECK_IO(NabuCrcBank(spb, DLM_DES_ADDR, DLM_LENGTH_ADDR, G_DLM_CHECKSUM_ADDR, &parts[1]));
++    CHECK_IO(nt36xxx_write_addr(spb, TX_AUTO_COPY_EN, 0x69));
++    for (i = 0; i < count; ++i) {
++        unsigned int remaining, bin, sram;
++        if (!parts[i].size) continue;
++        remaining = parts[i].size + 1;
++        bin = parts[i].bin; sram = parts[i].sram;
++        while (remaining) {
++            USHORT chunk = (USHORT)(remaining < NVT_TRANSFER_LEN ? remaining : NVT_TRANSFER_LEN);
++            CHECK_IO(nt36xxx_set_page(spb, sram));
++            RtlCopyMemory(transfer, buffer + bin, chunk);
++            CHECK_IO(SpbWriteDataSynchronously(spb, SPI_WRITE_MASK(sram & 0x7f), transfer, chunk));
++            remaining -= chunk; bin += chunk; sram += chunk;
+         }
+     }
+-
+-    nvt_bld_crc_enable(SpbContext);
+-
+-    nvt_fw_crc_enable(SpbContext);
+-
+-    nvt_boot_ready(SpbContext);
+-    
+-    disable_pen_input_device(SpbContext, FALSE);
+-    
+-    ExFreePoolWithTag((PVOID)buffer, TOUCH_POOL_TAG);
+-    ExFreePoolWithTag((PVOID)bin_map, TOUCH_POOL_TAG);
+-    ExFreePoolWithTag((PVOID)fwbuf, TOUCH_POOL_TAG);
+-
+-    return ntstatus;
++    CHECK_IO(NabuFinishTransfer(spb));
++Cleanup:
++    if (file) ZwClose(file);
++    if (key) WdfRegistryClose(key);
++    if (pathString) WdfObjectDelete(pathString);
++    if (fullPath.Buffer) ExFreePoolWithTag(fullPath.Buffer, TOUCH_POOL_TAG);
++    if (buffer) ExFreePoolWithTag(buffer, TOUCH_POOL_TAG);
++    if (parts) ExFreePoolWithTag(parts, TOUCH_POOL_TAG);
++    if (transfer) ExFreePoolWithTag(transfer, TOUCH_POOL_TAG);
++    return status;
+ }
+diff --git a/src/power.c b/src/power.c
+index e8a396b..e4c1d94 100644
+--- a/src/power.c
++++ b/src/power.c
+@@ -1,411 +1,136 @@
+-/*++
+-    Copyright (c) Microsoft Corporation. All Rights Reserved.
+-    Copyright (c) Bingxing Wang. All Rights Reserved.
+-    Copyright (c) LumiaWoA authors. All Rights Reserved.
+-
+-    Module Name:
+-
+-        power.c
+-
+-    Abstract:
+-
+-        Contains FocalTech power-on and power-off functionality
+-
+-    Environment:
+-
+-        Kernel mode
+-
+-    Revision History:
+-
+---*/
+-
+-#include <Cross Platform Shim\compat.h>
+-#include <controller.h>
+-#include <spb.h>
+-#include <nt36xxx\ntinternal.h>
+-#include <nt36xxx\ntfwupdate.h>
++// Copyright (c) original driver authors. Local nabu sleep candidate.
++// Lock order: PowerTransitionLock -> ControllerLock -> SpbLock.
++// Replay timer never takes these locks; drain before taking ControllerLock.
+ #include <internal.h>
+-#include <touch_power\touch_power.h>
++#include <nt36xxx/ntinternal.h>
++#include <nt36xxx/ntfwupdate.h>
+ #include <power.tmh>
++#define NABU_EVENT_BUFFER 0x2FE00u
+ 
+-NTSTATUS
+-TchPowerSettingCallback(
+-    _In_ LPCGUID SettingGuid,
+-    _In_ PVOID Value,
+-    _In_ ULONG ValueLength,
+-    _Inout_opt_ PVOID Context
+-)
++static NTSTATUS NabuAwakeLocked(PDEVICE_EXTENSION dev, BOOLEAN force)
+ {
+-    NTSTATUS status = STATUS_SUCCESS;
+-    PDEVICE_EXTENSION devContext = NULL;
+-    FT5X_CONTROLLER_CONTEXT* ControllerContext = NULL;
+-    SPB_CONTEXT* SpbContext = NULL;
+-
+-    if (Context == NULL)
+-    {
+-        Trace(
+-            TRACE_LEVEL_ERROR,
+-            TRACE_POWER,
+-            "TchPowerSettingCallback: Context is NULL"
+-        );
+-
+-        status = STATUS_INVALID_DEVICE_REQUEST;
+-        goto exit;
+-    }
+-
+-    devContext = (PDEVICE_EXTENSION)Context;
+-    ControllerContext = (FT5X_CONTROLLER_CONTEXT*)devContext->TouchContext;
+-    SpbContext = &(devContext->I2CContext);
+-
+-    //
+-    // Power Source change
+-    //
+-    if (IsEqualGUID(&GUID_ACDC_POWER_SOURCE, SettingGuid))
+-    {
+-        Trace(
+-            TRACE_LEVEL_INFORMATION,
+-            TRACE_POWER,
+-            "Power State Change Notification");
+-
+-        if (ValueLength != sizeof(DWORD))
+-        {
+-            Trace(
+-                TRACE_LEVEL_ERROR,
+-                TRACE_POWER,
+-                "TchPowerSettingCallback: Unexpected value size."
+-            );
+-
+-            status = STATUS_INVALID_DEVICE_REQUEST;
+-            goto exit;
+-        }
+-
+-        DWORD PowerState = *(DWORD*)Value;
+-        switch (PowerState)
+-        {
+-            // On Battery
+-        case PoAc:
+-            Trace(
+-                TRACE_LEVEL_INFORMATION,
+-                TRACE_POWER,
+-                "On Battery Power");
+-
+-            status = Ft5xChangeChargerConnectedState(
+-                ControllerContext,
+-                SpbContext,
+-                0
+-            );
+-
+-            if (!NT_SUCCESS(status))
+-            {
+-                Trace(
+-                    TRACE_LEVEL_ERROR,
+-                    TRACE_POWER,
+-                    "Error Changing Charger Connected state - 0x%08lX",
+-                    status);
+-                goto exit;
+-            }
+-            break;
+-            // Plugged In
+-        case PoDc:
+-        case PoHot:
+-            Trace(
+-                TRACE_LEVEL_INFORMATION,
+-                TRACE_POWER,
+-                "On External Power");
+-
+-            status = Ft5xChangeChargerConnectedState(
+-                ControllerContext,
+-                SpbContext,
+-                1
+-            );
+-
+-            if (!NT_SUCCESS(status))
+-            {
+-                Trace(
+-                    TRACE_LEVEL_ERROR,
+-                    TRACE_POWER,
+-                    "Error Changing Charger Connected state - 0x%08lX",
+-                    status);
+-                goto exit;
+-            }
+-            break;
+-        default:
+-            Trace(
+-                TRACE_LEVEL_ERROR,
+-                TRACE_POWER,
+-                "Unknown power state - 0x%02X",
+-                PowerState);
+-        }
+-    }
+-    else if (IsEqualGUID(&GUID_CONSOLE_DISPLAY_STATE, SettingGuid))
+-    {
+-        Trace(
+-            TRACE_LEVEL_INFORMATION,
+-            TRACE_POWER,
+-            "Monitor State Change Notification");
+-
+-        if (ValueLength != sizeof(DWORD))
+-        {
+-            Trace(
+-                TRACE_LEVEL_ERROR,
+-                TRACE_POWER,
+-                "TchPowerSettingCallback: Unexpected value size."
+-            );
+-
+-            status = STATUS_INVALID_DEVICE_REQUEST;
+-            goto exit;
+-        }
+-
+-        DWORD DisplayState = *(DWORD*)Value;
+-        DWORD GestureEnabled = 0;
+-        //unsigned char buf[1] = { 0x11 };
+-
+-        switch (DisplayState)
+-        {
+-        case 0:
+-            Trace(
+-                TRACE_LEVEL_INFORMATION,
+-                TRACE_POWER,
+-                "The Display is Off");
+-
+-            status = PowerToggle(&devContext->TouchPowerContext, 0);
+-
+-            if (!NT_SUCCESS(status))
+-            {
+-                Trace(
+-                    TRACE_LEVEL_ERROR,
+-                    TRACE_POWER,
+-                    "Error changing touch power state - 0x%08lX",
+-                    status);
+-                goto exit;
+-            }
+-
+-            if (NT_SUCCESS(RtlReadRegistryValue(
+-                (PCWSTR)L"\\Registry\\Machine\\SOFTWARE\\OEM\\Nokia\\Touch\\WakeupGesture",
+-                (PCWSTR)L"Enabled",
+-                REG_DWORD,
+-                &GestureEnabled,
+-                sizeof(DWORD))) && GestureEnabled == 1)
+-            {
+-                status = Ft5xSetReportingFlagsF12(
+-                    ControllerContext,
+-                    SpbContext,
+-                    FT5X_F12_REPORTING_WAKEUP_GESTURE_MODE,
+-                    NULL
+-                );
+-
+-                if (!NT_SUCCESS(status))
+-                {
+-                    Trace(
+-                        TRACE_LEVEL_ERROR,
+-                        TRACE_POWER,
+-                        "Error Changing Reporting Mode for F12 - 0x%08lX",
+-                        status);
+-                    goto exit;
+-                }
+-            }
+-            /*else {
+-                //Write command to enter "deep sleep mode" if wake up gesture is disabled
+-                SpbWriteDataSynchronously(SpbContext, SPI_WRITE_MASK(NT36XXX_EVT_HOST_CMD), buf, 1);
+-            }*/
+-
+-            if (!NT_SUCCESS(status))
+-            {
+-                Trace(
+-                    TRACE_LEVEL_ERROR,
+-                    TRACE_POWER,
+-                    "Error Changing Reporting Mode for F12 - 0x%08lX",
+-                    status);
+-                goto exit;
+-            }
+-
+-            break;
+-        case 1:
+-            Trace(
+-                TRACE_LEVEL_INFORMATION,
+-                TRACE_POWER,
+-                "The Display is On");
+-
+-            status = PowerToggle(&devContext->TouchPowerContext, 1);
+-
+-            if (!NT_SUCCESS(status))
+-            {
+-                Trace(
+-                    TRACE_LEVEL_ERROR,
+-                    TRACE_POWER,
+-                    "Error changing touch power state - 0x%08lX",
+-                    status);
+-                goto exit;
+-            }
+-
+-            status = Ft5xSetReportingFlagsF12(
+-                ControllerContext,
+-                SpbContext,
+-                FT5X_F12_REPORTING_CONTINUOUS_MODE,
+-                NULL
+-            );
+-
+-            if (!NT_SUCCESS(status))
+-            {
+-                Trace(
+-                    TRACE_LEVEL_ERROR,
+-                    TRACE_POWER,
+-                    "Error Changing Reporting Mode for F12 - 0x%08lX",
+-                    status);
+-                goto exit;
+-            }
+-
+-            //Load firmware each time after display turned on
+-            NVTLoadFirmwareFile(ControllerContext->FxDevice, SpbContext);
++    FT5X_CONTROLLER_CONTEXT* c = dev->TouchContext;
++    NTSTATUS status;
++    if (!force && c->FirmwareReady && !c->ChipAsleep) return STATUS_SUCCESS;
++    c->FirmwareReady = FALSE;
++    status = NVTLoadFirmwareFile(dev->FxDevice, &dev->I2CContext);
++    if (!NT_SUCCESS(status)) return status;
++    c->ChipAsleep = FALSE;
++    c->FirmwareReady = TRUE;
++    Trace(TRACE_LEVEL_INFORMATION, TRACE_POWER, "Nabu firmware transfer complete");
++    return STATUS_SUCCESS;
++}
+ 
+-            break;
+-        case 2:
+-            Trace(
+-                TRACE_LEVEL_INFORMATION,
+-                TRACE_POWER,
+-                "The Display is Dimmed");
++static NTSTATUS NabuSleepLocked(PDEVICE_EXTENSION dev)
++{
++    FT5X_CONTROLLER_CONTEXT* c = dev->TouchContext;
++    UCHAR command = NT36XXX_CMD_ENTER_SLEEP;
++    LARGE_INTEGER delay;
++    NTSTATUS status;
++    if (c->ChipAsleep) return STATUS_SUCCESS;
++    if (!c->FirmwareReady) return STATUS_INVALID_DEVICE_STATE;
++    status = nt36xxx_set_page(&dev->I2CContext, NABU_EVENT_BUFFER | NT36XXX_EVT_HOST_CMD);
++    if (!NT_SUCCESS(status)) return status;
++    status = SpbWriteDataSynchronously(&dev->I2CContext,
++        SPI_WRITE_MASK(NT36XXX_EVT_HOST_CMD), &command, sizeof(command));
++    if (!NT_SUCCESS(status)) return status;
++    delay.QuadPart = RELATIVE(MILLISECONDS(50));
++    KeDelayExecutionThread(KernelMode, FALSE, &delay);
++    c->ChipAsleep = TRUE;
++    c->FirmwareReady = FALSE;
++    Trace(TRACE_LEVEL_INFORMATION, TRACE_POWER, "Nabu deep sleep command accepted");
++    return STATUS_SUCCESS;
++}
+ 
+-            break;
+-        default:
+-            Trace(
+-                TRACE_LEVEL_ERROR,
+-                TRACE_POWER,
+-                "Unknown display state - 0x%02X",
+-                DisplayState);
+-        }
++// Caller owns PowerTransitionLock. WDF owns interrupt connect/disconnect.
++// Never call WdfInterruptDisable/Enable from an arbitrary Po callback thread.
++static NTSTATUS NabuDisplayLocked(PDEVICE_EXTENSION dev)
++{
++    FT5X_CONTROLLER_CONTEXT* c = dev->TouchContext;
++    NTSTATUS status;
++    if (!dev->RuntimeD0) return STATUS_SUCCESS;
++    InterlockedExchange(&dev->ReportContext.ReportsSuppressed, 1);
++    ReportStopContinuous(&dev->ReportContext);
++    WdfWaitLockAcquire(c->ControllerLock, NULL);
++    if (dev->DisplayOn) {
++        status = NabuAwakeLocked(dev, FALSE);
++        if (NT_SUCCESS(status)) InterlockedExchange(&dev->ReportContext.ReportsSuppressed, 0);
++    } else {
++        ReportReleaseContacts(&dev->ReportContext);
++        status = NabuSleepLocked(dev);
++        if (!NT_SUCCESS(status) && c->FirmwareReady && !c->ChipAsleep)
++            InterlockedExchange(&dev->ReportContext.ReportsSuppressed, 0);
+     }
+-
+-exit:
++    WdfWaitLockRelease(c->ControllerLock);
++    if (!dev->DisplayOn) ReportStopContinuous(&dev->ReportContext);
++    Trace(TRACE_LEVEL_INFORMATION, TRACE_POWER,
++        "Nabu display request %ld completed 0x%08lX", dev->DisplayOn, status);
+     return status;
+ }
+ 
+-NTSTATUS
+-TchWakeDevice(
+-   IN VOID *ControllerContext,
+-   IN SPB_CONTEXT *SpbContext
+-)
+-/*++
+-
+-Routine Description:
+-
+-   Enables multi-touch scanning
+-
+-Arguments:
+-
+-   ControllerContext - Touch controller context
+-
+-   SpbContext - A pointer to the current i2c context
+-
+-Return Value:
+-
+-   NTSTATUS indicating success or failure
++_Use_decl_annotations_
++NTSTATUS TchPowerSettingCallback(LPCGUID setting, PVOID value, ULONG length, PVOID context)
++{
++    PDEVICE_EXTENSION dev = context;
++    ULONG state;
++    NTSTATUS status = STATUS_SUCCESS;
++    if (!dev || !setting || !value || length != sizeof(ULONG)) return STATUS_INVALID_PARAMETER;
++    RtlCopyMemory(&state, value, sizeof(state));
++    if (!IsEqualGUID(&GUID_CONSOLE_DISPLAY_STATE, setting)) return STATUS_SUCCESS;
++    if (state > 2) return STATUS_INVALID_PARAMETER;
++    if (state == 2) return STATUS_SUCCESS;
++    // PrepareHardware can receive the initial callback before entering D0.
++    WdfWaitLockAcquire(dev->PowerTransitionLock, NULL);
++    InterlockedExchange(&dev->DisplayOn, state == 1);
++    if (dev->TouchContext) status = NabuDisplayLocked(dev);
++    WdfWaitLockRelease(dev->PowerTransitionLock);
++    return status;
++}
+ 
+---*/
++NTSTATUS NabuEnterD0(WDFDEVICE device)
+ {
+-    FT5X_CONTROLLER_CONTEXT* controller;
++    PDEVICE_EXTENSION dev = GetDeviceContext(device);
++    FT5X_CONTROLLER_CONTEXT* c = dev->TouchContext;
+     NTSTATUS status;
+-
+-    controller = (FT5X_CONTROLLER_CONTEXT*) ControllerContext;
+-
+-    //
+-    // Check if we were already on
+-    //
+-    if (controller->DevicePowerState == PowerDeviceD0)
+-    {
+-        goto exit;
+-    }
+-
+-    controller->DevicePowerState = PowerDeviceD0;
+-
+-    //
+-    // Attempt to put the controller into operating mode 
+-    //
+-    status = Ft5xChangeSleepState(
+-        controller,
+-        SpbContext,
+-        FT5X_F01_DEVICE_CONTROL_SLEEP_MODE_OPERATING);
+-
+-    if (!NT_SUCCESS(status))
+-    {
+-        Trace(
+-            TRACE_LEVEL_ERROR,
+-            TRACE_POWER,
+-            "Error waking touch controller - 0x%08lX",
+-            status);
++    if (!c) return STATUS_INVALID_DEVICE_STATE;
++    WdfWaitLockAcquire(dev->PowerTransitionLock, NULL);
++    InterlockedExchange(&dev->ReportContext.ReportsSuppressed, 1);
++    ReportStopContinuous(&dev->ReportContext);
++    WdfWaitLockAcquire(c->ControllerLock, NULL);
++    status = NabuAwakeLocked(dev, TRUE); // PEP may have removed power in D3.
++    if (NT_SUCCESS(status)) {
++        c->DevicePowerState = PowerDeviceD0;
++        InterlockedExchange(&dev->RuntimeD0, 1);
++        if (dev->DisplayOn) InterlockedExchange(&dev->ReportContext.ReportsSuppressed, 0);
++        else {
++            ReportReleaseContacts(&dev->ReportContext);
++            status = NabuSleepLocked(dev);
++        }
+     }
+-
+-exit:
+-
+-    return STATUS_SUCCESS;
++    if (!NT_SUCCESS(status)) InterlockedExchange(&dev->RuntimeD0, 0);
++    WdfWaitLockRelease(c->ControllerLock);
++    WdfWaitLockRelease(dev->PowerTransitionLock);
++    return status;
+ }
+ 
+-NTSTATUS
+-TchStandbyDevice(
+-   IN VOID *ControllerContext,
+-   IN SPB_CONTEXT *SpbContext,
+-    IN VOID* ReportContext
+-)
+-/*++
+-
+-Routine Description:
+-
+-   Disables multi-touch scanning to conserve power
+-
+-Arguments:
+-
+-   ControllerContext - Touch controller context
+-
+-   SpbContext - A pointer to the current i2c context
+-
+-Return Value:
+-
+-   NTSTATUS indicating success or failure
+-
+---*/
++NTSTATUS NabuExitD0(WDFDEVICE device)
+ {
+-    FT5X_CONTROLLER_CONTEXT* controller;
+-    NTSTATUS status;
+-
+-    controller = (FT5X_CONTROLLER_CONTEXT*) ControllerContext;
+-
+-    //
+-    // Interrupts are now disabled but the ISR may still be
+-    // executing, so grab the controller lock to ensure ISR
+-    // is finished touching HW and controller state.
+-    //
+-    WdfWaitLockAcquire(controller->ControllerLock, NULL);
+-
+-    //
+-    // Put the chip in sleep mode
+-    //
+-    status = Ft5xChangeSleepState(
+-        ControllerContext,
+-        SpbContext,
+-        FT5X_F01_DEVICE_CONTROL_SLEEP_MODE_SLEEPING);
+-
+-    if (!NT_SUCCESS(status))
+-    {
+-        Trace(
+-            TRACE_LEVEL_ERROR,
+-            TRACE_POWER,
+-            "Error sleeping touch controller - 0x%08lX",
+-            status);
++    PDEVICE_EXTENSION dev = GetDeviceContext(device);
++    FT5X_CONTROLLER_CONTEXT* c = dev->TouchContext;
++    NTSTATUS status = STATUS_SUCCESS;
++    if (!c) return STATUS_SUCCESS;
++    WdfWaitLockAcquire(dev->PowerTransitionLock, NULL);
++    InterlockedExchange(&dev->ReportContext.ReportsSuppressed, 1);
++    ReportStopContinuous(&dev->ReportContext);
++    WdfWaitLockAcquire(c->ControllerLock, NULL);
++    if (dev->RuntimeD0) {
++        ReportReleaseContacts(&dev->ReportContext);
++        status = NabuSleepLocked(dev);
+     }
+-
+-    controller->DevicePowerState = PowerDeviceD3;
+-
+-    //
+-    // Invalidate state
+-    //
+-    ((PREPORT_CONTEXT)ReportContext)->Cache.SlotValid = 0;
+-    ((PREPORT_CONTEXT)ReportContext)->Cache.SlotDirty = 0;
+-    ((PREPORT_CONTEXT)ReportContext)->Cache.DownCount = 0;
+-    ((PREPORT_CONTEXT)ReportContext)->ButtonCache.ButtonSlots[0] = 0;
+-    ((PREPORT_CONTEXT)ReportContext)->ButtonCache.ButtonSlots[1] = 0;
+-    ((PREPORT_CONTEXT)ReportContext)->ButtonCache.ButtonSlots[2] = 0;
+-
+-
+-    WdfWaitLockRelease(controller->ControllerLock);
+-
+-    return STATUS_SUCCESS;
+-}
+\ No newline at end of file
++    InterlockedExchange(&dev->RuntimeD0, 0);
++    c->FirmwareReady = FALSE;
++    c->DevicePowerState = PowerDeviceD3;
++    WdfWaitLockRelease(c->ControllerLock);
++    WdfWaitLockRelease(dev->PowerTransitionLock);
++    return status;
++}
+diff --git a/src/report.c b/src/report.c
+index 3343b97..782c59b 100644
+--- a/src/report.c
++++ b/src/report.c
+@@ -21,6 +21,7 @@
+ 
+ #include <Cross Platform Shim\compat.h>
+ #include <controller.h>
++#include <internal.h>
+ #include <resolutions.h>
+ #include <hid.h>
+ #include <HidCommon.h>
+@@ -28,9 +29,11 @@
+ #include <report.h>
+ #include <report.tmh>
+ 
+-WDFTIMER  timerHandle;
+-PREPORT_CONTEXT cachedReportContext = NULL;
+-DETECTED_OBJECTS objectData;
++typedef struct _NABU_REPLAY_CONTEXT {
++    PREPORT_CONTEXT Report;
++    DETECTED_OBJECTS Objects;
++} NABU_REPLAY_CONTEXT;
++WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(NABU_REPLAY_CONTEXT, NabuReplayContext)
+ 
+ NTSTATUS
+ ReportWakeup(
+@@ -499,139 +502,70 @@ exit:
+ 	return status;
+ }
+ 
+-NTSTATUS
+-TchContinuousObjectInterruptServicingEvtTimerFunc(
+-	IN WDFTIMER Timer
+-)
++VOID
++ReportStopContinuous(PREPORT_CONTEXT context)
+ {
+-	NTSTATUS status = STATUS_SUCCESS;
+-
+-	Trace(
+-            TRACE_LEVEL_ERROR,
+-		TRACE_REPORTING,
+-		"TchContinuousObjectInterruptServicingEvtTimerFunc ENTRY");
+-
+-      if (cachedReportContext == NULL)
+-      {
+-		Trace(
+-			TRACE_LEVEL_ERROR,
+-			TRACE_REPORTING,
+-			"Error while reporting objects - cachedReportContext is NULL");
+-
+-            WdfTimerStop(Timer, FALSE);
+-		goto exit;
+-      }
+-
+-	status = ReportObjectsInternal(
+-		cachedReportContext,
+-		objectData);
+-
+-	if (!NT_SUCCESS(status))
+-	{
+-		Trace(
+-			TRACE_LEVEL_ERROR,
+-			TRACE_REPORTING,
+-			"Error while reporting objects - 0x%08lX",
+-			status);
+-
+-            WdfTimerStop(Timer, FALSE);
+-            status = STATUS_SUCCESS;
+-		goto exit;
+-	}
++    if (context->ContinuousTimer) WdfTimerStop(context->ContinuousTimer, TRUE);
++}
+ 
+-exit:
+-	Trace(
+-            TRACE_LEVEL_ERROR,
+-		TRACE_REPORTING,
+-		"TchContinuousObjectInterruptServicingEvtTimerFunc EXIT - 0x%08lX",
+-		status);
++VOID
++ReportReleaseContacts(PREPORT_CONTEXT context)
++{
++    DETECTED_OBJECTS empty;
++    RtlZeroMemory(&empty, sizeof(empty));
++    (void)ReportObjectsInternal(context, empty);
++    if (context->PenPresent)
++        (void)ReportPen(context, FALSE, FALSE, FALSE, FALSE, FALSE, 0, 0, 0, 0, 0);
++    RtlZeroMemory(&context->Cache, sizeof(context->Cache));
++    RtlZeroMemory(&context->ButtonCache, sizeof(context->ButtonCache));
++    context->PenPresent = FALSE;
++}
+ 
+-	return status;
++VOID
++TchContinuousObjectInterruptServicingEvtTimerFunc(WDFTIMER timer)
++{
++    NABU_REPLAY_CONTEXT* cache = NabuReplayContext(timer);
++    if (!cache->Report || InterlockedCompareExchange(&cache->Report->ReportsSuppressed, 0, 0)) {
++        WdfTimerStop(timer, FALSE);
++        return;
++    }
++    if (!NT_SUCCESS(ReportObjectsInternal(cache->Report, cache->Objects)))
++        WdfTimerStop(timer, FALSE);
+ }
+ 
+ NTSTATUS
+-ReportConfigureContinuousSimulationTimer(
+-	IN WDFDEVICE DeviceHandle
+-)
++ReportConfigureContinuousSimulationTimer(WDFDEVICE device)
+ {
+-	NTSTATUS status = STATUS_SUCCESS;
+-
+-	WDF_TIMER_CONFIG  timerConfig;
+-	WDF_OBJECT_ATTRIBUTES  timerAttributes;
+-
+-	WDF_TIMER_CONFIG_INIT(
+-      	&timerConfig,
+-      	TchContinuousObjectInterruptServicingEvtTimerFunc);
+-
+-      timerConfig.Period = 50;
+-
+-      WDF_OBJECT_ATTRIBUTES_INIT(&timerAttributes);
+-      timerAttributes.ParentObject = DeviceHandle;
+-
+-	status = WdfTimerCreate(
+-      	&timerConfig,
+-      	&timerAttributes,
+-      	&timerHandle);
+-
+-	if (!NT_SUCCESS(status))
+-	{
+-		Trace(
+-			TRACE_LEVEL_ERROR,
+-			TRACE_INIT,
+-			"Error while creating the WDF timer - 0x%08lX",
+-			status);
+-
+-		goto exit;
+-	}
+-
+-exit:
+-	return status;
++    PREPORT_CONTEXT report = &GetDeviceContext(device)->ReportContext;
++    WDF_TIMER_CONFIG config;
++    WDF_OBJECT_ATTRIBUTES attributes;
++    NTSTATUS status;
++    if (report->ContinuousTimer) return STATUS_SUCCESS;
++    WDF_TIMER_CONFIG_INIT(&config, TchContinuousObjectInterruptServicingEvtTimerFunc);
++    config.Period = 50;
++    config.AutomaticSerialization = FALSE;
++    WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attributes, NABU_REPLAY_CONTEXT);
++    attributes.ParentObject = device;
++    status = WdfTimerCreate(&config, &attributes, &report->ContinuousTimer);
++    if (NT_SUCCESS(status)) NabuReplayContext(report->ContinuousTimer)->Report = report;
++    return status;
+ }
+ 
+ NTSTATUS
+-ReportObjectsContinuous(
+-	IN PREPORT_CONTEXT ReportContext,
+-	IN DETECTED_OBJECTS data
+-)
++ReportObjectsContinuous(PREPORT_CONTEXT report, DETECTED_OBJECTS data)
+ {
+-      NTSTATUS status = STATUS_SUCCESS;
+-
+-	Trace(
+-            TRACE_LEVEL_ERROR,
+-		TRACE_REPORTING,
+-		"ReportObjectsContinuous ENTRY");
+-
+-      WdfTimerStop(timerHandle, TRUE);
+-
+-      cachedReportContext = ReportContext;
+-
+-      RtlCopyMemory(&objectData, &data, sizeof(objectData));
+-
+-	status = ReportObjectsInternal(
+-		ReportContext,
+-		objectData);
+-
+-	if (!NT_SUCCESS(status))
+-	{
+-		Trace(
+-			TRACE_LEVEL_VERBOSE,
+-			TRACE_SAMPLES,
+-			"Error while reporting objects - 0x%08lX",
+-			status);
+-
+-		goto exit;
+-	}
+-
+-	WdfTimerStart(timerHandle, WDF_REL_TIMEOUT_IN_MS(50));
+-
+-exit:	
+-      Trace(
+-            TRACE_LEVEL_ERROR,
+-		TRACE_REPORTING,
+-		"ReportObjectsContinuous EXIT - 0x%08lX",
+-		status);
+-
+-	return status;
++    NABU_REPLAY_CONTEXT* cache;
++    NTSTATUS status;
++    if (InterlockedCompareExchange(&report->ReportsSuppressed, 0, 0)) return STATUS_SUCCESS;
++    if (!report->ContinuousTimer) return STATUS_INVALID_DEVICE_STATE;
++    WdfTimerStop(report->ContinuousTimer, TRUE);
++    if (InterlockedCompareExchange(&report->ReportsSuppressed, 0, 0)) return STATUS_SUCCESS;
++    cache = NabuReplayContext(report->ContinuousTimer);
++    cache->Objects = data;
++    status = ReportObjectsInternal(report, data);
++    if (NT_SUCCESS(status) && !InterlockedCompareExchange(&report->ReportsSuppressed, 0, 0))
++        WdfTimerStart(report->ContinuousTimer, WDF_REL_TIMEOUT_IN_MS(50));
++    return status;
+ }
+ 
+ NTSTATUS
+@@ -640,6 +574,7 @@ ReportObjects(
+ 	IN DETECTED_OBJECTS data
+ )
+ {
++    if (InterlockedCompareExchange(&ReportContext->ReportsSuppressed, 0, 0)) return STATUS_SUCCESS;
+ 	if (ReportContext->Props.TouchHardwareLacksContinuousReporting)
+       {
+             return ReportObjectsContinuous(
+diff --git a/src/spb.c b/src/spb.c
+index d46469d..7fcdfd5 100644
+--- a/src/spb.c
++++ b/src/spb.c
+@@ -192,13 +192,14 @@ SpbWriteDataSynchronously(
+     return status;
+ }
+ 
++_Use_decl_annotations_
+ NTSTATUS
+ SpbReadDataSynchronously(
+-    IN SPB_CONTEXT* SpbContext,
+-    IN UCHAR Address,
+-    _In_reads_bytes_(Length) PVOID Data,
+-    IN ULONG Length,
+-    IN BOOLEAN hack
++    SPB_CONTEXT* SpbContext,
++    UCHAR Address,
++    PVOID Data,
++    ULONG Length,
++    BOOLEAN hack
+ )
+ /*++
+ 
+@@ -303,6 +304,7 @@ SpbReadDataSynchronously(
+     if (!NT_SUCCESS(status) ||
+         bytesRead != Length)
+     {
++        if (NT_SUCCESS(status)) status = STATUS_DEVICE_DATA_ERROR;
+         Trace(
+             TRACE_LEVEL_ERROR,
+             TRACE_SPB,
+diff --git a/include/nt36xxx/fwparse.h b/include/nt36xxx/fwparse.h
+new file mode 100644
+index 0000000..5bc2f0a
+--- /dev/null
++++ b/include/nt36xxx/fwparse.h
+@@ -0,0 +1,61 @@
++/* Bounded, allocation-free parser. Shared by the driver and host tests. */
++#pragma once
++#define NABU_MAX_PARTITIONS 256u
++typedef struct _NABU_FW_PART {
++    unsigned int bin, sram, size, crc;
++} NABU_FW_PART;
++
++static unsigned int NabuLe32(const unsigned char* b)
++{
++    return (unsigned int)b[0] | ((unsigned int)b[1] << 8) |
++        ((unsigned int)b[2] << 16) | ((unsigned int)b[3] << 24);
++}
++
++/* size is the last-byte index; size == 0 denotes a reserved partition. */
++static int NabuParseFirmware(const unsigned char* b, unsigned int length,
++    NABU_FW_PART* parts, unsigned int capacity, unsigned int* count)
++{
++    unsigned int end, limit, info, overlay, cascade, found = 0, n, pos, i;
++    if (!count) return 0;
++    *count = 0;
++    if (!b || !parts || length < 0x30u) return 0;
++    end = NabuLe32(b);
++    cascade = (b[0x20] & 2u) != 0;
++    if (end < 0x30u || end > length || (end & 15u)) return 0;
++    limit = cascade ? end / 2u : end;
++    if (limit < 0x30u || (limit & 15u)) return 0;
++    info = (limit - 0x30u) / 16u + cascade;
++    overlay = (b[0x28] & 0x10u) ? b[0x28] & 15u : 0u;
++    if (info > NABU_MAX_PARTITIONS - 2u - overlay) return 0;
++    n = 2u + info + overlay;
++    if (n > capacity) return 0;
++    for (i = 0; i < n; ++i) {
++        NABU_FW_PART* p = &parts[i];
++        if (i < 2u) {
++            p->bin = NabuLe32(b + i * 12u);
++            p->sram = NabuLe32(b + 4u + i * 12u);
++            p->size = NabuLe32(b + 8u + i * 12u);
++            p->crc = NabuLe32(b + 0x18u + i * 4u);
++            if (p->size > 0x1ffffu) return 0; /* CRC length register is 17 bits. */
++        } else {
++            if (i < 2u + info) {
++                pos = found && cascade ? end - 16u : 0x30u + 16u * (i - 2u);
++            } else {
++                unsigned int offset = 16u * (i - 2u - info);
++                if (parts[1].bin > length || offset > length - parts[1].bin) return 0;
++                pos = parts[1].bin + offset;
++            }
++            if (pos > length || length - pos < 16u) return 0;
++            p->sram = NabuLe32(b + pos);
++            p->size = NabuLe32(b + pos + 4u);
++            p->bin = NabuLe32(b + pos + 8u);
++            p->crc = NabuLe32(b + pos + 12u);
++            if (i < 2u + info && p->bin < end && p->size) found = 1;
++        }
++        if (!p->size) continue;
++        if (p->bin >= length || p->size >= length - p->bin) return 0;
++        if (p->sram > 0xffffffu || p->size > 0xffffffu - p->sram) return 0;
++    }
++    *count = n;
++    return 1;
++}

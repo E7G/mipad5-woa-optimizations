@@ -1,0 +1,228 @@
+{
+  "Upstream": "https://github.com/map220v/nt36523_win",
+  "Revision": "7c7a760caa8818e9500934af852721497576d5bf",
+  "FirmwareIncluded": false,
+  "TextEncodingAndLineEndingsNormalized": true,
+  "Files": [
+    {
+      "Path": "include/controller.h",
+      "LocalTestedInputSHA256": "ef9f4b4831d70436020fce04e184bf3d823244ddd9c0a41c23859c482f44a901",
+      "PublishedSHA256": "ef9f4b4831d70436020fce04e184bf3d823244ddd9c0a41c23859c482f44a901"
+    },
+    {
+      "Path": "include/device.h",
+      "LocalTestedInputSHA256": "d5a17a4896a59547f61cb8f0badde9290dfe79912d90e5811ad1d4f035e1b1af",
+      "PublishedSHA256": "d5a17a4896a59547f61cb8f0badde9290dfe79912d90e5811ad1d4f035e1b1af"
+    },
+    {
+      "Path": "include/driver.h",
+      "LocalTestedInputSHA256": "40172d33a6643816fcb7b0d6fb357d287eb1c47a43a9e5a8fcf8eba753a7ceed",
+      "PublishedSHA256": "40172d33a6643816fcb7b0d6fb357d287eb1c47a43a9e5a8fcf8eba753a7ceed"
+    },
+    {
+      "Path": "include/hid.h",
+      "LocalTestedInputSHA256": "e97e0ea4082b2eaf273e8caa35ce9bccca2579652c8e00ba31644c33040fc226",
+      "PublishedSHA256": "e97e0ea4082b2eaf273e8caa35ce9bccca2579652c8e00ba31644c33040fc226"
+    },
+    {
+      "Path": "include/hidCommon.h",
+      "LocalTestedInputSHA256": "056d537052dbefcc6547cc08936e5b6bd73000d6e51f1b4b1d74233745a30f6c",
+      "PublishedSHA256": "056d537052dbefcc6547cc08936e5b6bd73000d6e51f1b4b1d74233745a30f6c"
+    },
+    {
+      "Path": "include/idle.h",
+      "LocalTestedInputSHA256": "b7fb4b2649072b08c9ce139cc23700e3adc63fd20fb8e6f908361bc4085e13bc",
+      "PublishedSHA256": "b7fb4b2649072b08c9ce139cc23700e3adc63fd20fb8e6f908361bc4085e13bc"
+    },
+    {
+      "Path": "include/internal.h",
+      "LocalTestedInputSHA256": "b5e4ba1ded8e494c9fecbc14ebed40414009f54927d64800a53f1ab04b606c6a",
+      "PublishedSHA256": "b5e4ba1ded8e494c9fecbc14ebed40414009f54927d64800a53f1ab04b606c6a"
+    },
+    {
+      "Path": "include/nt36xxx/ntfwupdate.h",
+      "LocalTestedInputSHA256": "6edc807c90c1dd0ec0dc448da01b0190746c7e5c375a7eedabb96b3b2c992636",
+      "PublishedSHA256": "6edc807c90c1dd0ec0dc448da01b0190746c7e5c375a7eedabb96b3b2c992636"
+    },
+    {
+      "Path": "include/nt36xxx/ntinternal.h",
+      "LocalTestedInputSHA256": "404428c493e9584888dd88f26e1cc16a11586bafc49d17a9fba60f313a936acb",
+      "PublishedSHA256": "404428c493e9584888dd88f26e1cc16a11586bafc49d17a9fba60f313a936acb"
+    },
+    {
+      "Path": "include/queue.h",
+      "LocalTestedInputSHA256": "6be34ce70d877fc1fb738a643a49d3e3aeda1623b2b0d91361f46fbfdf2d2cef",
+      "PublishedSHA256": "6be34ce70d877fc1fb738a643a49d3e3aeda1623b2b0d91361f46fbfdf2d2cef"
+    },
+    {
+      "Path": "include/resolutions.h",
+      "LocalTestedInputSHA256": "46b9ceb74502d303bfa71028bb68a623c47d3b685ad78b326b500c3666690189",
+      "PublishedSHA256": "46b9ceb74502d303bfa71028bb68a623c47d3b685ad78b326b500c3666690189"
+    },
+    {
+      "Path": "include/spb.h",
+      "LocalTestedInputSHA256": "9632b7f99e1aa11cc217f4953072d97107552b196294f36c59c981ff0c5a3ee3",
+      "PublishedSHA256": "9632b7f99e1aa11cc217f4953072d97107552b196294f36c59c981ff0c5a3ee3"
+    },
+    {
+      "Path": "LICENSE",
+      "LocalTestedInputSHA256": "d85687b9407fd7dc7e4b0d48f6676b0b49aefeded3095c34846a97dd3c3ffd84",
+      "PublishedSHA256": "d85687b9407fd7dc7e4b0d48f6676b0b49aefeded3095c34846a97dd3c3ffd84"
+    },
+    {
+      "Path": "UPSTREAM_README.md",
+      "LocalTestedInputSHA256": "6cb4b8cc031df483c9432a927c02b5e46bde84d4381828b56ef666389c04ed77",
+      "PublishedSHA256": "6cb4b8cc031df483c9432a927c02b5e46bde84d4381828b56ef666389c04ed77"
+    },
+    {
+      "Path": "contrib/FocalTechTouch.vcxproj.filters",
+      "LocalTestedInputSHA256": "8941fb8e37348b83331493be2fffdd3d8c4af932c3b5c5e934186df8ddc62b8e",
+      "PublishedSHA256": "0d4572d27a8349e467e2a12edebcf48eb2941d1ad2669048666a422ba4a33b41"
+    },
+    {
+      "Path": "contrib/nt36xxx.sln",
+      "LocalTestedInputSHA256": "0f5b87794ab05e339d0071368bb76243265dee17b92337587af388f53f2465b8",
+      "PublishedSHA256": "3c320f1df9fff2dd14b700f7beaf8aa241465fcd1869f852fb49394b5a8f3173"
+    },
+    {
+      "Path": "contrib/nt36xxx.vcxproj",
+      "LocalTestedInputSHA256": "c157699e1d553a9faa542f145bb334a96138d8f74b382e41312deba07b4200e3",
+      "PublishedSHA256": "b27360c9874d94067698196097859b0c1259b891622bacc010769e901e2bf4af"
+    },
+    {
+      "Path": "include/Cross Platform Shim/bitops.h",
+      "LocalTestedInputSHA256": "49bd5a1d2696a0ae21b02187a861a1600935fb8e33ef585b7a0e3748e10df06f",
+      "PublishedSHA256": "49bd5a1d2696a0ae21b02187a861a1600935fb8e33ef585b7a0e3748e10df06f"
+    },
+    {
+      "Path": "include/Cross Platform Shim/compat.h",
+      "LocalTestedInputSHA256": "f7b693ef59bd615f80a3a04065dd4a4973df48bf4092f68de332578d0257d616",
+      "PublishedSHA256": "f7b693ef59bd615f80a3a04065dd4a4973df48bf4092f68de332578d0257d616"
+    },
+    {
+      "Path": "include/Cross Platform Shim/hweight.h",
+      "LocalTestedInputSHA256": "ca8580ec2f37039742b920a2c3bee26e8c9b499902032e3ea56fa8e48d3ad526",
+      "PublishedSHA256": "ca8580ec2f37039742b920a2c3bee26e8c9b499902032e3ea56fa8e48d3ad526"
+    },
+    {
+      "Path": "include/report.h",
+      "LocalTestedInputSHA256": "a7660253bd0765dddb8b6d27498705a7e6a2117ca9fa7d8f969f65764361fa23",
+      "PublishedSHA256": "a7660253bd0765dddb8b6d27498705a7e6a2117ca9fa7d8f969f65764361fa23"
+    },
+    {
+      "Path": "include/resource.h",
+      "LocalTestedInputSHA256": "2e3d5623e41ddf1fbbe1f100a558b5fa0bc5350c846a2152741a73e4a8d481c1",
+      "PublishedSHA256": "2e3d5623e41ddf1fbbe1f100a558b5fa0bc5350c846a2152741a73e4a8d481c1"
+    },
+    {
+      "Path": "include/touch_power/public.h",
+      "LocalTestedInputSHA256": "8831acf5d0d7404fe15c423e4b7a42d3fe9d8c50f8892c87fd1c8238908a9d71",
+      "PublishedSHA256": "8831acf5d0d7404fe15c423e4b7a42d3fe9d8c50f8892c87fd1c8238908a9d71"
+    },
+    {
+      "Path": "include/touch_power/touch_power.h",
+      "LocalTestedInputSHA256": "19ad4e615cf5b3948fb34327ede39319d6833dc4b85e08ab62ed0d35b0a8a6b5",
+      "PublishedSHA256": "19ad4e615cf5b3948fb34327ede39319d6833dc4b85e08ab62ed0d35b0a8a6b5"
+    },
+    {
+      "Path": "include/trace.h",
+      "LocalTestedInputSHA256": "40a7b1f47dbbeb3e3a63ed9d1d2dc9979d0163d465b9f027b9ca933ebfa7f46c",
+      "PublishedSHA256": "40a7b1f47dbbeb3e3a63ed9d1d2dc9979d0163d465b9f027b9ca933ebfa7f46c"
+    },
+    {
+      "Path": "src/Cross Platform Shim/bitops.c",
+      "LocalTestedInputSHA256": "168f980b7c122cd0922ed1c432348159640ca00c926c3036c14a99e1fb260a1f",
+      "PublishedSHA256": "168f980b7c122cd0922ed1c432348159640ca00c926c3036c14a99e1fb260a1f"
+    },
+    {
+      "Path": "src/Cross Platform Shim/hweight.c",
+      "LocalTestedInputSHA256": "27a0e4c8a95ddfb3f39dc0f0b849302bb2d6b280fa92dd0b7a6e6a8bba8b4fbe",
+      "PublishedSHA256": "27a0e4c8a95ddfb3f39dc0f0b849302bb2d6b280fa92dd0b7a6e6a8bba8b4fbe"
+    },
+    {
+      "Path": "src/Resource.rc",
+      "LocalTestedInputSHA256": "b6759ef38deaf59d24c4cb471a9702b6f493f2838ff23c6b0b691319a26cdf8e",
+      "PublishedSHA256": "51464f0296ebf4ff6ccfa6bef4108496b95bc17e1391e9193d7438dfb06aaefb"
+    },
+    {
+      "Path": "src/device.c",
+      "LocalTestedInputSHA256": "bc7655bdb3667166a7549a001e86e37b76f723a07efa3a9c456e1e155576a87e",
+      "PublishedSHA256": "bc7655bdb3667166a7549a001e86e37b76f723a07efa3a9c456e1e155576a87e"
+    },
+    {
+      "Path": "src/driver.c",
+      "LocalTestedInputSHA256": "406f6b180088012bec5319730a68d0c31d3595703ef02131da7a78179b23d6f4",
+      "PublishedSHA256": "406f6b180088012bec5319730a68d0c31d3595703ef02131da7a78179b23d6f4"
+    },
+    {
+      "Path": "src/hid.c",
+      "LocalTestedInputSHA256": "072c4c3d4681e297f7e58b150c5b111ffe861e2a4f13e4136e2b424a167a5924",
+      "PublishedSHA256": "072c4c3d4681e297f7e58b150c5b111ffe861e2a4f13e4136e2b424a167a5924"
+    },
+    {
+      "Path": "src/idle.c",
+      "LocalTestedInputSHA256": "4766dadebee9c085297b71a4964fa0b8db6570a5fc5229c7aaa4908579bd504c",
+      "PublishedSHA256": "4766dadebee9c085297b71a4964fa0b8db6570a5fc5229c7aaa4908579bd504c"
+    },
+    {
+      "Path": "src/init.c",
+      "LocalTestedInputSHA256": "7b5b57c3b964b9c9c2b83f624ad6794fd21adadb7bde74caa0191c4b8b39d1e6",
+      "PublishedSHA256": "7b5b57c3b964b9c9c2b83f624ad6794fd21adadb7bde74caa0191c4b8b39d1e6"
+    },
+    {
+      "Path": "src/nt36xxx.inf",
+      "LocalTestedInputSHA256": "79ac3be1e6eed8575566ffbba15f1d085a1cd7267673f0fd62c4a43fae7620de",
+      "PublishedSHA256": "7222091322351ce458a243aec39c13492efddd697ef3392270f2ae631064e839"
+    },
+    {
+      "Path": "src/nt36xxx/ntfwupdate.c",
+      "LocalTestedInputSHA256": "b3ab989a754e69b51627e84b26fda0bf52efe593c44c5c50daa39585385be039",
+      "PublishedSHA256": "b3ab989a754e69b51627e84b26fda0bf52efe593c44c5c50daa39585385be039"
+    },
+    {
+      "Path": "src/nt36xxx/ntinternal.c",
+      "LocalTestedInputSHA256": "a0893b1564ad786ffe706dec9001d8268c55049118afbf43dbb7d6caa2ce3dc8",
+      "PublishedSHA256": "a0893b1564ad786ffe706dec9001d8268c55049118afbf43dbb7d6caa2ce3dc8"
+    },
+    {
+      "Path": "src/power.c",
+      "LocalTestedInputSHA256": "24b0b6e41df25241a9c37bd981d4bd9479bfc687a9981c35495b94293573d7bb",
+      "PublishedSHA256": "24b0b6e41df25241a9c37bd981d4bd9479bfc687a9981c35495b94293573d7bb"
+    },
+    {
+      "Path": "src/queue.c",
+      "LocalTestedInputSHA256": "d6d4c51347febccdbe6a79bace5fed948f58df5d1759d77e06e028581796d73b",
+      "PublishedSHA256": "d6d4c51347febccdbe6a79bace5fed948f58df5d1759d77e06e028581796d73b"
+    },
+    {
+      "Path": "src/registry.c",
+      "LocalTestedInputSHA256": "e4d63126ff0102ba68e4e963187ee6d72e3624ba0660892396b903870a826f83",
+      "PublishedSHA256": "e4d63126ff0102ba68e4e963187ee6d72e3624ba0660892396b903870a826f83"
+    },
+    {
+      "Path": "src/report.c",
+      "LocalTestedInputSHA256": "a0cf742a872fb5510aef7f3683771bc41a1bf4e41076166e9e55c076e2b13484",
+      "PublishedSHA256": "a0cf742a872fb5510aef7f3683771bc41a1bf4e41076166e9e55c076e2b13484"
+    },
+    {
+      "Path": "src/resolutions.c",
+      "LocalTestedInputSHA256": "e1255d2b50d875e0d8fba93346e876a951e7363110b3153a14dc1589518d4bb4",
+      "PublishedSHA256": "e1255d2b50d875e0d8fba93346e876a951e7363110b3153a14dc1589518d4bb4"
+    },
+    {
+      "Path": "src/spb.c",
+      "LocalTestedInputSHA256": "8ea8975b4f1e6ec258c6d5307fd6a98000a55e6a9db21fa869826a2424eaf54f",
+      "PublishedSHA256": "8ea8975b4f1e6ec258c6d5307fd6a98000a55e6a9db21fa869826a2424eaf54f"
+    },
+    {
+      "Path": "src/touch_power/touch_power.c",
+      "LocalTestedInputSHA256": "f0060655740c8a6f3d3e307fde03e59e31ead2c3b51a3258667bf1de494371fb",
+      "PublishedSHA256": "f0060655740c8a6f3d3e307fde03e59e31ead2c3b51a3258667bf1de494371fb"
+    },
+    {
+      "Path": "include/nt36xxx/fwparse.h",
+      "LocalTestedInputSHA256": "540e25a3ff363001438d18fb5c4aa692c227a13ad0d6497b2d7715e3238b617d",
+      "PublishedSHA256": "540e25a3ff363001438d18fb5c4aa692c227a13ad0d6497b2d7715e3238b617d"
+    }
+  ]
+}

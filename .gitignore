@@ -1,0 +1,27 @@
+# Private state, credentials, hardware images and generated files
+.private/
+artifacts/
+build/
+intermediate/
+__pycache__/
+*.pyc
+*.sys
+*.cat
+*.pdb
+*.cer
+*.pfx
+*.pem
+*.key
+*.dmp
+*.etl
+*.hiv
+*.img
+*.esd
+*.wim
+*.iso
+*.bin
+*.exe
+*.obj
+*.log
+*.remote-output.txt
+**/Directory.Build.props

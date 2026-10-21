@@ -1,0 +1,25 @@
+name: Host mocks and publication checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python tools/validate_public.py
+      - run: python tools/test_touch.py
+  powershell-syntax:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - shell: powershell
+        run: |
+          $tokens = $null; $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'tools/Set-NabuGraphicsIdle.ps1'), [ref]$tokens, [ref]$errors)
+          if ($errors.Count) { $errors | Out-String | Write-Error; exit 1 }
