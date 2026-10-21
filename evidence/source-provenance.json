@@ -142,12 +142,12 @@
     {
       "Path": "src/Resource.rc",
       "LocalTestedInputSHA256": "b6759ef38deaf59d24c4cb471a9702b6f493f2838ff23c6b0b691319a26cdf8e",
-      "PublishedSHA256": "51464f0296ebf4ff6ccfa6bef4108496b95bc17e1391e9193d7438dfb06aaefb"
+      "PublishedSHA256": "22e13a3e3524c2ffd4f7dd3acd08575ecb272e4c8374459fef75862b2e58b0c1"
     },
     {
       "Path": "src/device.c",
       "LocalTestedInputSHA256": "bc7655bdb3667166a7549a001e86e37b76f723a07efa3a9c456e1e155576a87e",
-      "PublishedSHA256": "bc7655bdb3667166a7549a001e86e37b76f723a07efa3a9c456e1e155576a87e"
+      "PublishedSHA256": "8694961e4873a43bd00266cc398e27eb417dc32ddba2d17cde2118045b5be82d"
     },
     {
       "Path": "src/driver.c",
@@ -172,12 +172,12 @@
     {
       "Path": "src/nt36xxx.inf",
       "LocalTestedInputSHA256": "79ac3be1e6eed8575566ffbba15f1d085a1cd7267673f0fd62c4a43fae7620de",
-      "PublishedSHA256": "7222091322351ce458a243aec39c13492efddd697ef3392270f2ae631064e839"
+      "PublishedSHA256": "10f38c2239417b8f19178366203aea20e292255da86bece1d85ed27f850e3ca4"
     },
     {
       "Path": "src/nt36xxx/ntfwupdate.c",
       "LocalTestedInputSHA256": "b3ab989a754e69b51627e84b26fda0bf52efe593c44c5c50daa39585385be039",
-      "PublishedSHA256": "b3ab989a754e69b51627e84b26fda0bf52efe593c44c5c50daa39585385be039"
+      "PublishedSHA256": "f5ecdc56810eb3020e4e19758e409c2d6ed9b7e8ddfb923a9f9abb049013d19b"
     },
     {
       "Path": "src/nt36xxx/ntinternal.c",
@@ -202,7 +202,7 @@
     {
       "Path": "src/report.c",
       "LocalTestedInputSHA256": "a0cf742a872fb5510aef7f3683771bc41a1bf4e41076166e9e55c076e2b13484",
-      "PublishedSHA256": "a0cf742a872fb5510aef7f3683771bc41a1bf4e41076166e9e55c076e2b13484"
+      "PublishedSHA256": "a9afa0c7e1e2e573ce39d469e981f44af234451d1c994f88c608418fa0d4dff9"
     },
     {
       "Path": "src/resolutions.c",
@@ -212,7 +212,7 @@
     {
       "Path": "src/spb.c",
       "LocalTestedInputSHA256": "8ea8975b4f1e6ec258c6d5307fd6a98000a55e6a9db21fa869826a2424eaf54f",
-      "PublishedSHA256": "8ea8975b4f1e6ec258c6d5307fd6a98000a55e6a9db21fa869826a2424eaf54f"
+      "PublishedSHA256": "b6c457ea6160252b6acbf6e79e0cf4edd5fa0ea5b75be6c21160077623ab0bc6"
     },
     {
       "Path": "src/touch_power/touch_power.c",
