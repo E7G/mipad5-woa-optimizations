@@ -18,10 +18,26 @@ function Read-Setting([string]$suffix) {
         return @{Exists=$true;Kind=$k.GetValueKind('ForceActive').ToString();Value=$k.GetValue('ForceActive')}
     } finally {if($k){$k.Dispose()}}
 }
+function Get-DisplayOverrides {
+    # The tested binary builds DISPLAY\<enum>, not a bare INTERNAL1 section.
+    # Also reject legacy/bare overrides rather than silently ignoring them.
+    $names=@('INTERNAL1','INTERNAL2','INTERNAL3','EXTERNAL1','EXTERNAL2',
+             'EXTERNAL3','EXTERNAL4','EXTERNAL5','EXTERNAL6',
+             'WIRELESSDISPLAY1','WIRELESSDISPLAY2','WIRELESSDISPLAY3')
+    $suffixes=@('\DISPLAY')
+    foreach($name in $names){$suffixes+=('\DISPLAY\'+$name);$suffixes+=('\'+$name)}
+    foreach($suffix in $suffixes){
+        $setting=Read-Setting $suffix
+        if($setting.Exists){[pscustomobject]@{Section=$suffix;Setting=$setting}}
+    }
+}
 try {
     $current=Read-Setting '\GRAPHICS'
     if($Mode -eq 'Inspect') {
-        [pscustomobject]@{Graphics=$current;Global=(Read-Setting '');PrimaryDisplay=(Read-Setting '\INTERNAL1');Writes=$false}
+        [pscustomobject]@{Graphics=$current;Global=(Read-Setting '');
+            PrimaryDisplay=(Read-Setting '\DISPLAY\INTERNAL1');
+            LegacyBarePrimaryDisplay=(Read-Setting '\INTERNAL1');
+            DisplayOverrides=@(Get-DisplayOverrides);Writes=$false}
         return
     }
     if(-not $AcknowledgeExperimental){throw 'Explicit -AcknowledgeExperimental required'}
@@ -31,7 +47,7 @@ try {
     $touch=$base.OpenSubKey('SYSTEM\CurrentControlSet\Enum\ACPI\NTTS3652')
     try {if(-not $touch){throw 'Expected nabu touch hardware not found'}} finally {if($touch){$touch.Dispose()}}
     if($Mode -eq 'Enable') {
-        if((Read-Setting '').Exists -or (Read-Setting '\INTERNAL1').Exists){throw 'Global/display override present: no write'}
+        if((Read-Setting '').Exists -or @(Get-DisplayOverrides).Count -ne 0){throw 'Global/display override present: no write'}
         $service=$base.OpenSubKey('SYSTEM\CurrentControlSet\Services\QCDX')
         try {if(-not $service){throw 'QCDX service missing'};$image=[string]$service.GetValue('ImagePath')} finally {if($service){$service.Dispose()}}
         $image=[Environment]::ExpandEnvironmentVariables($image.Trim('"'))
