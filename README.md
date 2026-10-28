@@ -29,6 +29,7 @@
 
 ```sh
 python tools/test_touch.py
+python tools/test_graphics_etw.py
 python tools/validate_public.py
 python tools/verify_driver_sources.py --set archive /path/to/MiPad5-Drivers-v2608.03-Desktop.7z
 ```

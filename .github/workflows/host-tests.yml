@@ -14,6 +14,7 @@ jobs:
       - run: python tools/validate_public.py
       - run: python tools/test_touch.py
       - run: python tools/test_sleepstudy.py
+      - run: python tools/test_graphics_etw.py
   powershell-syntax:
     runs-on: windows-latest
     timeout-minutes: 5
