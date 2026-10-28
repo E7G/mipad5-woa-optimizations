@@ -18,6 +18,8 @@ The Android panel ENP/ENN nodes each specify a 233-microsecond regulator ramp de
 
 ## Next reproducible gate
 
+An older focused, loss-free 2026-10-17 ETW trace covering about 12 minutes of screen-off time showed no GPU0 active/idle callback **inside** the interval; one GPU0 activation appeared at the wake boundary. The later 2026-10-23 SleepStudy still reported GPU0/MMU0 about 97% active. These records support a persistent runtime-power problem but do not identify the client holding GPU0 or prove the current boot has identical callbacks. A fresh, bounded trace is needed before any patch.
+
 1. Collect `powercfg /sleepstudy /xml` after an ordinary, battery-only, manually initiated standby. Run `python tools/summarize_sleepstudy.py sleepstudy.xml` locally; **do not upload the raw XML**. Compare GPU0 components 0/6/7, MMU0 and MMU1 across sessions.
 2. Before any new patch, obtain a trace that ties GPU0 display-component activation/idle callbacks to MMU0 device activity. The current SleepStudy only shows correlation, not the caller or rail power.
 3. Source-level change belongs in the owning WOA graphics/SMMU/PEP driver or ACPI only after the missing transition is identified and rollback is validated. The public WOA graphics/SMMU binaries are not source-level implementations; no safe blind replacement is proposed here.
