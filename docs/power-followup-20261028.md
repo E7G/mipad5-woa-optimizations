@@ -6,12 +6,14 @@ A 20-second desktop process sample showed no substantial user-mode background lo
 
 The last controlled, unplugged, **33-minute manual standby** (2026-10-23) resumed normally. SleepStudy reported 0% SW/HW DRIPS and roughly 97% active time for GPU0 and MMU0. Battery capacity fell one 135 mWh gauge step (58 → 57%), implying about 0.25 W or 0.73% of full capacity per hour **if the coarse gauge step is representative**. This is one session, not a validated before/after saving percentage. The observed blocker is below the app/service layer. Previous global GPU `ForceActive=0` caused a black-screen wake failure and was reverted; this repository does not recommend it.
 
+A fresh **existing** battery-only SleepStudy session from 2026-10-28 19:49 lasted 37.33 minutes (no new test was initiated for this audit). It again shows **0% SW/HW DRIPS**, GPU0 and MMU0 each **99% active**, and one 135 mWh capacity step (21,605 → 21,470 mWh). The reported GPU top components are **0 and 7** at 99%; component 6 is not listed in this session, whereas it was listed in the 2026-10-23 session. This is a change in the report's listed blockers, **not proof** that component 6 reached a specific F-state or that battery savings occurred. The 135 mWh quantization and unmatched conditions preclude a credible power-saving percentage.
+
 For active use, the display was observed at **120 Hz and 84% brightness** while charging. These are plausible, user-visible power levers, not proof of their contribution. Do not silently change refresh or brightness: benchmark an opt-in battery-only display profile against the current state, preserving AC settings and an immediate rollback. Keep the already-selected sleep/network trade-off and CPU maximum performance unless the user explicitly changes them.
 
 Near-term priorities:
 
 1. Measure battery-only screen-on power at fixed brightness/refresh before and after any opt-in display change.
 2. Repeat a clean 30–60 minute manual standby under similar battery/Wi-Fi/temperature conditions; compare mWh and SleepStudy, not only percentage.
-3. Investigate GPU0/MMU0 component activity with read-only tracing before any further single-engine GPU/UEFI experiment. Do not alter CXPA2 or global display/GPU force-active settings based on this report.
+3. Investigate GPU0 component **0/7** and MMU0 activity with read-only tracing before any further single-engine GPU/UEFI experiment. A previously typed mapping suggests component 7 relates to `EXTERNAL4`, but current reference/provider behavior is unproven; do not infer an `EXTERNAL4` override is safe. Do not alter CXPA2 or global display/GPU force-active settings based on this report.
 
 No new driver, boot, BCD, ACPI or standby policy change was made by this audit.
