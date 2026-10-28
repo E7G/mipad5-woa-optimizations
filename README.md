@@ -12,6 +12,7 @@
 |主机测试与分析记录|仅脱敏摘要，不含原始转储、网络或设备身份信息|
 |VIDEO 引擎|私有单项流程已验证播放画面/声音与唤醒，观测空闲 F2，已选择保留；公共写入工具未扩展到此项|
 |ROTATOR 引擎|私有单项流程已验证横竖屏、通用绘制与约 8.34 分钟唤醒，观测空闲 F2，已选择保留；DRIPS 仍为 0|
+|原 nabu 驱动与 Mi 9 移植来源|公开原版下载地址、四个组件固定上游提交、逐文件 SHA256、本机验证范围与只读核验工具；不再分发第三方二进制|
 
 **整机 SW/HW DRIPS 仍为 0%，未证明待机根因已全部解决。** 约 104 分钟熄屏估算掉电 2.7%（约 1.56%/小时），无同条件原配置对照，不能宣称节电幅度。此前全局 `ForceActive=0` 导致无法唤醒，已撤销，不提供该配置。
 
@@ -22,12 +23,14 @@
 - [测试方法、结果与限制](docs/validation.md)
 - [2026-10-22 三引擎现状与显示命名空间检查](docs/diagnostics-20261022.md)
 - [来源、署名与再分发范围](THIRD_PARTY_NOTICES.md)
+- [原驱动与 Mi 9 移植优化的来源/哈希](docs/driver-provenance-mi9.md)
 
 主机模拟测试（不需要平板，不安装驱动）：
 
 ```sh
 python tools/test_touch.py
 python tools/validate_public.py
+python tools/verify_driver_sources.py --set archive /path/to/MiPad5-Drivers-v2608.03-Desktop.7z
 ```
 
 需要 Python 3 与 GCC；默认使用测试程序生成的合成固件字节，不下载或分发真实固件。Windows 驱动构建需另备 Visual Studio、匹配的 ARM64 WDK/SDK 和合法取得的原始触摸固件。仓库不含签名私钥、证书、已签名驱动或一键刷写工具。
@@ -37,6 +40,8 @@ python tools/validate_public.py
 已保留原有许可证及作者署名。摄像头、PEP/PMIC、Type-C、SMMU、Qualcomm GPU 二进制、Android boot、BCD、双系统界面、SSH/Wi-Fi 配置不随此仓库发布；已安装的第三方驱动不能当作本项目原创成果。
 
 首批验证记录截至 **2026-10-18**，首次公开于 **2026-10-21**。**2026-10-22** 补充 VIDEO/ROTATOR 现场记录、显示命名空间只读核对与公共保护测试；完整待机修复仍未实现。
+
+**2026-10-28** 增加原驱动与米 9 移植四组件的来源/哈希清单及核验脚本。PEP 本机空指针保护成品不发布；本仓库仍不是可直接安装的全套驱动包。
 
 ## English summary
 

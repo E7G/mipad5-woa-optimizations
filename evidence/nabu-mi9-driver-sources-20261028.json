@@ -1,0 +1,55 @@
+{
+  "device": "Xiaomi Pad 5 (nabu)",
+  "platform": "Windows 11 ARM64",
+  "recordDate": "2026-10-28",
+  "scope": "Provenance and expected hashes only; no third-party driver binaries are redistributed here.",
+  "originalBsp": {
+    "release": "2608.03",
+    "url": "https://github.com/remtrik-stuff/MiPad5-Windows-Releases/releases/download/2608.03/MiPad5-Drivers-v2608.03-Desktop.7z",
+    "sha256": "39a4eba96ed5e28aab9099d79995c3b30a1436f3465682fbbeef09c6a77ddd39"
+  },
+  "mi9Source": {
+    "repository": "https://github.com/qaz6750/XiaoMi9-Drivers",
+    "revision": "1e6b02a202e7929870dc70cec54dc44a5a770075",
+    "pepRevision": "d63d516eee65083d6501f45683a6640a1f597cb8"
+  },
+  "components": [
+    {
+      "name": "PEP-CPU7-Guard",
+      "file": "qcpep8150.sys",
+      "originalBspSha256": "39fafcd60536c7d36dd95187dc9f51bfc4af661b614bce4a5e9ec0729fe24e01",
+      "mi9UpstreamSha256": "dee271ed9b93a5e9ba0243862a267da0089865289dd8401597ef6ec524b14e7c",
+      "mi9UpstreamUrl": "https://raw.githubusercontent.com/qaz6750/XiaoMi9-Drivers/d63d516eee65083d6501f45683a6640a1f597cb8/components/QC8150/Drivers/SOC/PowerManagement/qcpep8150.sys",
+      "localPatchedSha256": "2542f5088eb63748236e00439431e918dfa080cd79bfd232cb1ac44cc635e8b0",
+      "localPatch": "Single observed null-context crash guard, in addition to the upstream Mi9 CPU7 changes; signed locally. The patched binary is not distributed here.",
+      "lastVerified": "2026-10-28"
+    },
+    {
+      "name": "PMICExtension",
+      "file": "qcpmicext8150.sys",
+      "originalBspSha256": "533c3a555e111d4b12b657d026c92d63d5170d57297432d03bdaf3be96c7886a",
+      "mi9UpstreamSha256": "ecf85b7cd4e9dd008bb9715da5aa8f764d3b3f68b15617834a63c44360ebe440",
+      "mi9UpstreamUrl": "https://raw.githubusercontent.com/qaz6750/XiaoMi9-Drivers/1e6b02a202e7929870dc70cec54dc44a5a770075/components/QC8150/Drivers/SOC/PMIC/Extension/qcpmicext8150.sys",
+      "localPatchedSha256": null,
+      "lastVerified": "2026-10-13"
+    },
+    {
+      "name": "BatteryManager",
+      "file": "qcbattmngr8150.sys",
+      "originalBspSha256": "3659a20de0606aa7283ea3197a1c212e28bfec212c838914f19d74be629453a3",
+      "mi9UpstreamSha256": "83f9ea34e36513cab9bfbb1b1b8704904edbe91aef43d8ab9729e2b86993a184",
+      "mi9UpstreamUrl": "https://raw.githubusercontent.com/qaz6750/XiaoMi9-Drivers/1e6b02a202e7929870dc70cec54dc44a5a770075/components/QC8150/Drivers/Battery/BatteryManager/qcbattmngr8150.sys",
+      "localPatchedSha256": null,
+      "lastVerified": "2026-10-13"
+    },
+    {
+      "name": "TypeCController",
+      "file": "qcpmictcc8150.sys",
+      "originalBspSha256": "be9850ce5ab8a9e5ead615de592ff8177154bde9496320910210dc503b2b46e9",
+      "mi9UpstreamSha256": "d5b541810a7ae6b6367e0fb85e6a9a182051b889589b0921674c238572b4be0b",
+      "mi9UpstreamUrl": "https://raw.githubusercontent.com/qaz6750/XiaoMi9-Drivers/1e6b02a202e7929870dc70cec54dc44a5a770075/components/QC8150/Drivers/SOC/PMIC/TypeCController/qcpmictcc8150.sys",
+      "localPatchedSha256": null,
+      "lastVerified": "2026-10-28"
+    }
+  ]
+}

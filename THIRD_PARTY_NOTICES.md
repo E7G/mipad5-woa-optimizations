@@ -12,6 +12,8 @@
 ## 其他参考（未复制其驱动二进制）
 
 - [Project-Aloha/windows_oem_xiaomi_nabu](https://github.com/Project-Aloha/windows_oem_xiaomi_nabu)
+- [remtrik-stuff/MiPad5-Windows-Releases 2608.03](https://github.com/remtrik-stuff/MiPad5-Windows-Releases/releases/tag/2608.03)（原版 nabu 驱动发行包；只链接，不再分发）
+- [qaz6750/XiaoMi9-Drivers](https://github.com/qaz6750/XiaoMi9-Drivers)（四项移植来源；只记录来源及哈希，不再分发其驱动）
 - [WOA-Project/windows_silicon_qcom_hana](https://github.com/WOA-Project/windows_silicon_qcom_hana)
 - [Project-Silicium/Silicium-ACPI](https://github.com/Project-Silicium/Silicium-ACPI/tree/1c8bd63a7ffcaecf3c8764a6b01a11e053457543/Platforms/Xiaomi/nabu)
 - [Microsoft ID3D11VideoDevice 文档](https://learn.microsoft.com/en-us/windows/win32/api/d3d11/nn-d3d11-id3d11videodevice)
