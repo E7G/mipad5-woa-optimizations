@@ -51,6 +51,7 @@ python tools/verify_driver_sources.py --set archive /path/to/MiPad5-Drivers-v260
 - [Power follow-up](docs/power-followup-20261028.md): low background CPU load, battery CPU EPP already tuned, one coarse 33-minute standby estimate, GPU0/MMU0 still active with 0% DRIPS. No claim of a complete standby fix.
 - [Android kernel / WOA power crosswalk](docs/android-kernel-power-crosswalk-20261028.md): address-level identification separates GPU SMMU (`MMU1`) from shared application SMMU (`MMU0`); identifies the next driver-level evidence gate without changing firmware or power policy.
 - [RTC / HAL 20 triage](docs/rtc-hal20-20261028.md): time/alarm method failure is confirmed, but no specific ACPI method or PEIC dependency is proven. Keep this issue separate from the GPU/MMU sleep blocker.
+- [Deployed versus Project Aloha ACPI](docs/upstream-acpi-comparison-20261028.md): identical `G0MD`/`PRTC`/SMMU blocks but different GPU display enumeration and panel buffers; do not blindly swap DSDT/UEFI.
 
 ## English summary
 
