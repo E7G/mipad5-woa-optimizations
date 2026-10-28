@@ -11,6 +11,9 @@
 
 ## 其他参考（未复制其驱动二进制）
 
+- [inciAli/UsbNabu](https://github.com/inciAli/UsbNabu)（GPL-2.0；仅记录本机充电 A/B 和链接，不分发驱动、证书或源码）
+- [inciAli/NabuPrimeCore](https://github.com/inciAli/NabuPrimeCore)（GPL-2.0；仅记录 CPU7 对照和源码分析，不分发驱动、证书或源码）
+
 - [Project-Aloha/windows_oem_xiaomi_nabu](https://github.com/Project-Aloha/windows_oem_xiaomi_nabu)
 - [remtrik-stuff/MiPad5-Windows-Releases 2608.03](https://github.com/remtrik-stuff/MiPad5-Windows-Releases/releases/tag/2608.03)（原版 nabu 驱动发行包；只链接，不再分发）
 - [qaz6750/XiaoMi9-Drivers](https://github.com/qaz6750/XiaoMi9-Drivers)（四项移植来源；只记录来源及哈希，不再分发其驱动）

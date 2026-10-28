@@ -43,6 +43,13 @@ python tools/verify_driver_sources.py --set archive /path/to/MiPad5-Drivers-v260
 
 **2026-10-28** 增加原驱动与米 9 移植四组件的来源/哈希清单及核验脚本。PEP 本机空指针保护成品不发布；本仓库仍不是可直接安装的全套驱动包。
 
+## 2026-10-28 field follow-up
+
+- [UsbNabu charging A/B on one tablet](docs/usb-charging-comparison-20261028.md): battery-side net rate improved from about +0.7 W to +16–17.5 W with one USB-C charger; **USB input power and 33 W support were not measured**. UsbNabu is a third-party driver, linked but not redistributed here.
+- [CPU7 / NabuPrimeCore evaluation](docs/cpu7-nabuprime-evaluation-20261028.md): no measured full-load gain over this machine's already-patched PEP; idle-power and thermal differences remain untested. Do not run two CPU7 governors by default.
+- [Power follow-up](docs/power-followup-20261028.md): low background CPU load, battery CPU EPP already tuned, one coarse 33-minute standby estimate, GPU0/MMU0 still active with 0% DRIPS. No claim of a complete standby fix.
+- [Android kernel / WOA power crosswalk](docs/android-kernel-power-crosswalk-20261028.md): address-level identification separates GPU SMMU (`MMU1`) from shared application SMMU (`MMU0`); identifies the next driver-level evidence gate without changing firmware or power policy.
+
 ## English summary
 
 Experimental, source-first nabu Windows ARM64 touch sleep fixes and an opt-in, reversible GRAPHICS-only registry setting. One device resumed successfully; GPU/MMU1 idle F1 was observed. **System DRIPS remains zero; complete standby repair and comparative battery savings are NOT demonstrated.** No proprietary driver/firmware binaries, certificates, private keys or raw diagnostic traces are included. See the linked documents before attempting a build or a configuration change.
