@@ -16,3 +16,11 @@ The installed `ProxyAPO.dll` hash is unchanged from the prior audit. The [Projec
 **Next gate:** confirm whether the distorted notification occurred at 14:27:52, then replay the assigned WAV at unchanged volume. If distortion recurs, perform a short, reversible speaker **Audio enhancements Off** A/B test with human listening, restore the prior setting afterwards, and check for a new AudioDG crash. [Microsoft's audio troubleshooting guide](https://support.microsoft.com/en-us/windows/hardware/audio/fix-distorted-or-crackling-audio-in-windows) lists enhancements as one possible source of distortion, not a diagnosis for this device. If the crash still reproduces, use a bounded diagnostic that catches the writer before the heap-corruption detector; do not leave page heap or verifier enabled for normal use.
 
 No driver, audio setting, system volume, notification policy or boot configuration was changed in this triage.
+
+## Controlled playback follow-up
+
+- With the speaker's **Audio enhancements** switched off through Windows Settings, the user heard **no output** from the same test WAV. After restoring **Device Default Effects**, output remained silent until the Windows audio services were restarted. The user then heard the three repetitions normally. Thus disabling enhancements is not a usable fix on this configuration.
+- After a later normal reboot, the same WAV was audible but distorted at a measured Windows master volume of **52%**. Restarting `AudioEndpointBuilder` and `Audiosrv` did not clear this distortion. No new AudioDG Application Error appeared; the earlier heap-corruption dump is not proven to explain this playback distortion.
+- A 20% volume test was inaudible to the user. At **35%**, the user heard the same WAV normally on a repeat test. The master volume was left at 35% as a reversible symptom workaround; the previous 52% value was saved privately. This is one speaker/listening test, not proof that all media or long-term audio are fixed.
+
+**Next diagnostic gate:** compare a sufficiently audible 35% and 52% level using multiple media and, if available, a separate output path. Avoid changing unsigned APO/codec gains without a verified baseline and rollback. Do not describe the volume workaround as an AudioDG heap-corruption fix.
