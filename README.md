@@ -52,6 +52,7 @@ python tools/verify_driver_sources.py --set archive /path/to/MiPad5-Drivers-v260
 - [Android kernel / WOA power crosswalk](docs/android-kernel-power-crosswalk-20261028.md): address-level identification separates GPU SMMU (`MMU1`) from shared application SMMU (`MMU0`); identifies the next driver-level evidence gate without changing firmware or power policy.
 - [RTC / HAL 20 triage](docs/rtc-hal20-20261028.md): time/alarm method failure is confirmed, but no specific ACPI method or PEIC dependency is proven. Keep this issue separate from the GPU/MMU sleep blocker.
 - [Notification distortion / AudioDG crash triage](docs/audio-incident-20261105.md): a new heap-corruption dump recurs in the audio-effects initialization path; the writer and relation to the audible symptom still need a controlled A/B test.
+- [NabuDisplayFix single-device trial](docs/nabudisplayfix-trial-20261105.md): normal boot and short wake passed, but live adapter restart caused display corruption; DRIPS stayed at zero and the stock driver was restored.
 - [Deployed versus Project Aloha ACPI](docs/upstream-acpi-comparison-20261028.md): identical `G0MD`/`PRTC`/SMMU blocks but different GPU display enumeration and panel buffers; do not blindly swap DSDT/UEFI.
 
 ## English summary
