@@ -19,3 +19,11 @@ Upstream: [inciAli/NabuDisplayFix](https://github.com/inciAli/NabuDisplayFix), r
 6. At the user's choice, a final normal reboot loaded the **stock** driver. The stock service path, original power keys, PnP code 0, desktop and touch were verified. The temporary rollback task and local test-signing certificate were removed. Private backup and diagnostic files remain only on the test systems.
 
 **Conclusion:** normal-boot loading and one short wake passed, while `Live` produced corruption. Neither a reliable power saving nor a fix for the full nabu standby blocker was demonstrated. Do not enable the upstream bulk `IdleOn` configuration based on this test. A future controlled trial would need an unambiguous panel identification, a boot-time single-component override that remains active for the measured interval, and bounded component-state tracing, with offline recovery prepared.
+
+## Follow-up: retained inner-display override
+
+A second normal-boot trial corrected the startup safeguard: its first run restored only the QCDX service path for the *next* boot and left `DISPLAY\INTERNAL1 ForceActive=0` in place for the measured session. Readback confirmed the patched binary was loaded, the inner-display value was still `0`, and GPU PnP code was 0. Existing `GRAPHICS`, `VIDEO`, `ROTATOR`, and `EXTERNAL3` single-component settings were unchanged.
+
+With USB and charger disconnected, a bounded 16 MB ETW profile recorded the manual screen-off interval 16:06:57–16:12:27 (5m30s). The user resumed to the original desktop with normal display and touch. The trace covered the complete interval, reported zero lost events, and registered GPU0/MMU0/MMU1. GPU0 component 0 had **no idle callback** in the interval; component 1 did idle. SleepStudy reported **0 SW DRIPS, 0 HW DRIPS, and 0 DRIPS transitions**. The battery gauge did not step during this short sample, so it cannot quantify energy savings.
+
+Therefore the startup-task issue was corrected, but the retained override plus patch **did not resolve the observed standby blocker**. The exact pretrial registry values were restored, recovery tasks removed, and a final normal reboot verified the stock QCDX binary loaded with PnP code 0 and working display/touch. Do not present this as a proven power-saving fix or leave the trial driver installed by default.
